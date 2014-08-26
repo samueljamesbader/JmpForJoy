@@ -1,3 +1,15 @@
+# ===
+# Don't put our actual data online!
+# ===
+saved_data
+*.jmp
+
+
+
+# ===
+# Below is the standard .gitignore
+# ===
+
 # Windows image file caches
 Thumbs.db
 ehthumbs.db
