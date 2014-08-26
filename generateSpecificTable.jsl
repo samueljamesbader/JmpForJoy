@@ -88,13 +88,13 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 		failpct_colname=colname||"_FAILPCT";
 		
 		formulabool= eval expr(
-			(( expr(parse(colname)) < (expr(parse(colname))<<Get Property("Spec Limits"))["LSL"])
+			(( ascolumn(expr(colname)) < (ascolumn(expr(colname))<<Get Property("Spec Limits"))["LSL"])
 			|
-			( expr(parse(colname)) > (expr(parse(colname))<<Get Property("Spec Limits"))["USL"])) 	
+			( ascolumn(expr(colname)) > (ascolumn(expr(colname))<<Get Property("Spec Limits"))["USL"])) 	
 			);
 			
 		formulapct= eval expr(
-			col mean(expr(parse(failbool_colname)),:WAFER, :LOT_ID, :PCM_SPEC)
+			col mean(ascolumn(expr(failbool_colname)),:WAFER, :LOT_ID, :PCM_SPEC)
 		);
 		//show(formula);
 		htab << New Column(
