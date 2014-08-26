@@ -7,7 +7,20 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 	rno=N Items(::pdicts)+1;
 	Show(rno);
 	::pdicts[rno]=Associative Array();
-
+	
+	
+	cd = Column Dialog(
+		xvars = ColList("X Variables",Columns(:PCM_SPEC, :LOT_ID, :WAFER)),
+		xgroupers =  ColList("X Grouping"),
+	);
+	xvars=cd["xvars"];
+	xgroupers=cd["xgroupers"];
+	//xvars= List(:PCM_SPEC, :LOT_ID, :WAFER);
+	//xgroupers= List(:XCOORD);
+	if(n items(xvars),
+		primary xvar=xvars[1]<<get name;,
+		primary xvar="";);
+	Show(primary xvar);
 	win=New Window("Variability",
 		vb=V List Box());
 
@@ -72,18 +85,32 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 			//Text(Center Justified,{5,5},Print("WHAT"););
 		);
 		
+		xvarexpr=expr(Variables());
+		for(i=1, i<=n items(xvars),i+=1,
+			insertinto(xvarexpr,
+				eval expr( X(expr(xvars[i]),Position(1)))
+			)
+		);
+		insertinto(xvarexpr,
+			eval expr(Y(column(htab,expr(fail_colname))))
+		);
+		insertinto(xvarexpr,
+			eval expr(Y(column(htab,expr(colname))))
+		);
+		for(i=1, i<=n items(xgroupers), i+=1,
+			insertinto(xvarexpr,
+				eval expr(Group X(expr(xgroupers[i]))));
+		);
+		Show(xvarexpr);
+		xvarexprexpr=expr(nameexpr(xvarexpr));
+		
+		
 		vargraph=eval expr(
 			Graph Builder(
 				Size( 560, 590 ),
 				Show Control Panel( 0 ),
 				Show Legend( 0 ),
-				Variables(
-					X( column(htab,"PCM_SPEC")),
-					X( column(htab,"LOT_ID"), Position( 1 )  ),
-					X( column(htab,"WAFER"), Position( 1 ) ),
-					Y( column(htab,expr(fail_colname)) ),
-					Y( column(htab,expr(colname)) )
-				),
+				expr(xvarexprexpr),
 				Relative Sizes( "Y", [1 7] ),
 				Elements(
 					Position( 1, 1 ),
@@ -118,37 +145,20 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 						ScaleBox,
 						{Format( "Percent", 10, 3 )}
 					),
-					//Dispatch(
-					//	{},
-					//	expr(colname),
-					//	ScaleBox,
-					//	{Scale(Log)}
-					//),
 					Dispatch(
 						{},
-						"LOT_ID",
+						expr(primary xvar),
 						ScaleBox,
 						{Show Major Grid( 1 )}
 					),
 					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
 					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
 					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
-					//Dispatch( {}, "Y 1 title", TextEditBox, {Set Text( expr(Munger(colname, 1,"m","-") ))} ),
-					//Dispatch(
-					//	{},
-					//	"Graph Builder",
-					//	FrameBox(2),
-					//	{Add Graphics Script(
-					//		2,
-					//		Description( "Script" ),
-					//		name expr(script)
-					//	), Grid Line Order( 1 ), Reference Line Order( 3 )}
-					//)
 				)
 			)
 		);
 
-		
+		show(vargraph);
 
 		eval(eval expr(vb<<append(::pdicts[rno][colname]["graph"]=expr(name expr(vargraph)))));
 		

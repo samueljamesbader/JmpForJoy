@@ -2,7 +2,7 @@ Names Default To Here(1);
 generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	// Generate table for specific parameters
 	fulltab=Open("saved_data/"||dataname||".jmp",Private);
-	:WAFER << Set Modeling Type(Ordinal);
+	:WAFER << Set Modeling Type(Nominal);
 	
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
@@ -10,6 +10,11 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 		Write("Done listing parameters.\!N");
 		New Window(<<Modal,whichparambox=ListBox(all params));
 		whichparams=whichparambox<<Get Selected;
+	);
+	
+	if(not(N Items(whichparams)),
+		Write("No variables selected.");
+		Stop();
 	);
 	
 	Write("Generating horizontal data for specific parameters...\!N");
@@ -53,7 +58,13 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	Close(phtab, No Save);
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
-	htab << New Column("ColorMap", Numeric,Formula(Match(:Coord_CAT, "0_3", 1, "0_-4", 1, "-1_0", 2, "3_0", 1, "-4_0", 1, "0_0", 2, "2_2", 1, "2_-3", 1, "-3_-3", 1, "-3_2", 1, "0_2", 2, "2_0", 2, "0_-2", 2, "-2_0", 2, "0_-3", 1, "-1_-2", 1, "1_-2", 1, "3_-2", 1, "-2_-1", 1, "0_-1", 2, "2_-1", 2, "-3_0", 1, "1_0", 2, "-2_1", 1, "0_1", 2, "2_1", 2, "4_1", 1, "-1_2", 2, "1_2", 2, "3_2", 1, "-2_3", 1, "2_3", 1, "-1_4", 1, "1_4", 1)));
+	htab << New Column("ColorMap", Numeric,Formula(
+		Match(:Coord_CAT, "0_3", 1, "0_-4", 1, "-1_0", 2, "3_0", 1, "-4_0", 1,
+		"0_0", 2, "2_2", 1, "2_-3", 1, "-3_-3", 1, "-3_2", 1, "0_2", 2, "2_0", 2,
+		"0_-2", 2, "-2_0", 2, "0_-3", 1, "-1_-2", 1, "1_-2", 1, "3_-2", 1,
+		"-2_-1", 1, "0_-1", 2, "2_-1", 2, "-3_0", 1, "1_0", 2, "-2_1", 1,
+		"0_1", 2, "2_1", 2, "4_1", 1, "-1_2", 2, "1_2", 2, "3_2", 1, "-2_3",
+		1, "2_3", 1, "-1_4", 1, "1_4", 1, "0_4", 1)));
 	htab << Color By Column("ColorMap");
 	htab << End Data Update;
 	

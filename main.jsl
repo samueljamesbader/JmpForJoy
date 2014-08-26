@@ -1,5 +1,9 @@
 Names Default To Here(1);
 
+
+whichparams={};
+do download=0;
+
 // OLD Keithley
 //dataname="018A3P6M3318XF4C_falcon_pc11_dual_a1.in_D65946";
 //whichparams={"N.35x5.2_CBO@1UA","N.35x5.2_CES@1UA","N.35x5.2_EBO@1UA"};
@@ -10,12 +14,12 @@ Names Default To Here(1);
 
 // MOS WAT
 dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";
+//whichparams={"BV_N4_V 10/.18"};
 
 // Keithley
 //dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";
 
-whichparams={};
-do download=0;
+
 
 
 
@@ -33,7 +37,7 @@ include("generateSpecificTable.jsl");
 Show(whichparams);	
 {htab,params,dtLimits}=generateSpecificTable(dataname,whichparams);
 
-//a
+// Generate the actual report
 ::pdicts={};
 include("generateVariabilityReport.jsl");
 generateVariabilityReport(htab,params,dtLimits);
