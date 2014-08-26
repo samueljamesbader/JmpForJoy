@@ -1,0 +1,39 @@
+Names Default To Here(1);
+
+// OLD Keithley
+//dataname="018A3P6M3318XF4C_falcon_pc11_dual_a1.in_D65946";
+//whichparams={"N.35x5.2_CBO@1UA","N.35x5.2_CES@1UA","N.35x5.2_EBO@1UA"};
+
+// Bipolar WAT M3
+//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";
+//whichparams={"AN041_IB_0.5_2","NHSX50_IC_0.8V"};
+
+// MOS WAT
+dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";
+
+// Keithley
+//dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";
+
+whichparams={};
+do download=0;
+
+
+
+
+Close All(Data Tables);
+Close All(Reports);
+
+// Download if necessary
+if (do download,
+	include("downloadWATData.jsl");
+	downloadWATData(dataname););
+
+// Generate horizontal table
+include("generateSpecificTable.jsl");
+Show(whichparams);	
+{htab,params,dtLimits}=generateSpecificTable(dataname,whichparams);
+
+//a
+::pdicts={};
+include("generateVariabilityReport.jsl");
+generateVariabilityReport(htab,params,dtLimits);

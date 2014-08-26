@@ -1,0 +1,15 @@
+Names Default To Here(1);
+
+cleanName=Function({name},{Default Local},
+	reps=["-"=>"m", "@"=>"at", "."=>"p", "="=>"_", "^"=>"tothe", "/"=>"over"];
+	
+	keys=reps << get keys();
+	for(k=1,k<=n items(keys), k+=1,
+		key=keys[k];
+		rep=reps[key];
+		While(Munger(name,1,key),
+			name=Munger(name,1,key,rep);
+		);
+	);
+	name;
+);

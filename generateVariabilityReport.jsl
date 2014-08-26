@@ -1,0 +1,302 @@
+Write("PDICTs IS GLOBAL!!!\!N");
+
+
+							
+generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
+
+	rno=N Items(::pdicts)+1;
+	Show(rno);
+	::pdicts[rno]=Associative Array();
+
+	win=New Window("Variability",
+		vb=V List Box());
+
+	::up=0;
+	::dog=9;
+	::abc=1;
+	For( p=1, p<=N Items(params), p+=1,	
+		colname=params[p];
+		fail_colname=Concat(colname,"_FAILPCT");	
+		::pdicts[rno][colname]=Associative Array();
+		
+		
+		::pdicts[rno][colname]["LSL"]=(column(htab,colname) << get property("spec limits"))["LSL"];
+		::pdicts[rno][colname]["USL"]=(column(htab,colname) << get property("spec limits"))["USL"];
+		
+		::pdicts[rno][colname]["script"]=eval expr(
+			Handle( .5, ::pdicts[expr(rno)][expr(colname)]["LSL"],
+			
+				print("::up");
+				print(::up);
+				if(::up,print("doing nothing");::up=0;Stop();,
+					print("doing something");
+					print("staring lsl handle script");
+					print(expr(colname));
+					::pdicts[expr(rno)][expr(colname)]["lslbox"]<<set(y);
+					print("hey");
+					print(expr(colname),expr(rno));
+					lslboxChanged(expr(colname),expr(rno));
+				);,
+				
+				::up=1;
+				print("respecing");
+				reSpec(expr(colname),expr(rno));
+				//updateCPKrow(expr(colname),expr(rno));
+				print("done respecing");
+				::up=0;
+			);
+			Handle( .5,::pdicts[expr(rno)][expr(colname)]["USL"],
+			
+				print("::up");
+				print(::up);
+				if(::up,print("doing nothing");::up=0;Stop();,
+					print("doing something");
+					print("staring usl handle script");
+					print(expr(colname));
+					::pdicts[expr(rno)][expr(colname)]["uslbox"]<<set(y);
+					print("hey");
+					print(expr(colname));
+					uslboxChanged(expr(colname),expr(rno));
+				);,
+				
+				::up=1;
+				print("respecing");
+				::dog=6;
+				reSpec(expr(colname),expr(rno));
+				//updateCPKrow(expr(colname),expr(rno));
+				print("done respecing");
+				::dog=7;
+				::up=0;
+			);
+			//Text(Center Justified,{5,5},Char(::pdicts[expr(rno)][expr(colname)]["USL"]));
+			//Text(Center Justified,{5,5},Print("WHAT"););
+		);
+		
+		vargraph=eval expr(
+			Graph Builder(
+				Size( 560, 590 ),
+				Show Control Panel( 0 ),
+				Show Legend( 0 ),
+				Variables(
+					X( column(htab,"PCM_SPEC")),
+					X( column(htab,"LOT_ID"), Position( 1 )  ),
+					X( column(htab,"WAFER"), Position( 1 ) ),
+					Y( column(htab,expr(fail_colname)) ),
+					Y( column(htab,expr(colname)) )
+				),
+				Relative Sizes( "Y", [1 7] ),
+				Elements(
+					Position( 1, 1 ),
+					Line(
+						X( 1 ),
+						X( 2 ),
+						X( 3 ),
+						Y,
+						Legend( 8 ),
+						Row order( 0 ),
+						Summary Statistic( "Mean" )
+					)
+				),
+				Elements(
+					Position( 1, 2 ),
+					Points( X( 1 ), X( 2 ), X( 3 ), Y, Legend( 1 ), Jitter( 1 ) ),
+					Box Plot(
+						X( 1 ),
+						X( 2 ),
+						X( 3 ),
+						Y,
+						Legend( 6 ),
+						Jitter( 1 ),
+						Outliers( 1 ),
+						Box Style( "Outlier" )
+					)
+				),
+				SendToReport(
+					Dispatch(
+						{},
+						expr(fail_colname),
+						ScaleBox,
+						{Format( "Percent", 10, 3 )}
+					),
+					//Dispatch(
+					//	{},
+					//	expr(colname),
+					//	ScaleBox,
+					//	{Scale(Log)}
+					//),
+					Dispatch(
+						{},
+						"LOT_ID",
+						ScaleBox,
+						{Show Major Grid( 1 )}
+					),
+					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
+					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
+					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
+					//Dispatch( {}, "Y 1 title", TextEditBox, {Set Text( expr(Munger(colname, 1,"m","-") ))} ),
+					//Dispatch(
+					//	{},
+					//	"Graph Builder",
+					//	FrameBox(2),
+					//	{Add Graphics Script(
+					//		2,
+					//		Description( "Script" ),
+					//		name expr(script)
+					//	), Grid Line Order( 1 ), Reference Line Order( 3 )}
+					//)
+				)
+			)
+		);
+
+		
+
+		eval(eval expr(vb<<append(::pdicts[rno][colname]["graph"]=expr(name expr(vargraph)))));
+		
+		(::pdicts[rno][colname]["graph"]<<report())<<append(guibox=HListBox());
+		eval(evalexpr(guibox<<append(slob=OutlineBox("Spec Limits",
+			{"Recalc CPK",UpdateCPKrow(expr(colname),expr(rno))},
+			<<OutlineCloseOrientation(Horizontal)))));
+		
+		slob<<append(buthb=H List Box(Align(Center)));
+		eval(eval expr(buthb<<append(ButtonBox("Activate Sliders",
+			((::pdicts[expr(rno)][expr(colname)]["graph"]<<report)[Frame Box (2)])<<remove graphics script(1);
+			((::pdicts[expr(rno)][expr(colname)]["graph"]<<report)[Frame Box (2)])<<add graphics script(
+				expr(::pdicts[rno][colname]["script"])))
+			)));
+		
+		include("populateSpecs.jsl");
+		eval(eval expr(buthb<<append(ButtonBox("Save Param",
+			setAxis(expr(colname),expr(rno));
+			specsToTable(htab,expr(dtLimits),expr(colname));
+		))));
+		
+		slob<<append(limshb=H List Box());
+		(::pdicts[rno][colname]["graph"]<<report())<<set title(colname);
+		(::pdicts[rno][colname]["graph"]<<report())<<set auto stretching(0,0);
+		
+		limshb<<append(TextBox("<b> LSL:  </b>",<<Markup(1)));
+		
+		eval(eval expr(limshb<<append(
+			::pdicts[rno][expr(colname)]["lslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["LSL"],10,
+				<<Set Function(Function({},{},
+					lslboxChanged(expr(colname),expr(rno));
+					reSpec(expr(colname),expr(rno));
+					Show("After box changed.");
+					))))));
+		limshb<<append(TextBox("<b>  USL:  </b>",<<Markup(1)));
+		
+		
+		eval(eval expr(limshb<<append(
+			::pdicts[expr(rno)][expr(colname)]["uslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["USL"],10,
+				<<Set Function(Function({},{},
+					uslboxChanged(expr(colname),expr(rno));
+					reSpec(expr(colname),expr(rno));
+					))))));
+		
+		slob<<append(cpkhb=H List Box());
+		cpkhb<<append(TextBox("<b> Mean:  </b>",<<Markup(1)));
+		eval(eval expr(cpkhb<<append(
+			::pdicts[expr(rno)][expr(colname)]["meanbox"]=
+				TextBox("Hit Calc";))));
+		cpkhb<<append(TextBox("<b>  CPL:  </b>",<<Markup(1)));
+		eval(eval expr(cpkhb<<append(
+			::pdicts[expr(rno)][expr(colname)]["cplbox"]=
+				TextBox("Hit Calc";))));
+		cpkhb<<append(TextBox("<b>  CPU:  </b>",<<Markup(1)));
+		eval(eval expr(cpkhb<<append(
+			::pdicts[expr(rno)][expr(colname)]["cpubox"]=
+				TextBox("Hit Calc";))));
+		slob<<append(extrahb=HListBox());
+		eval(eval expr(extrahb<<append(ButtonBox("Hold Scales",setAxis(expr(colname),expr(rno))))));
+		//eval(eval expr(cpkhb<<append(
+		//	specialFilter(expr(colname),expr(rno)))));
+		
+		
+		eval(eval expr(guibox<<append(
+			datfilt=htab<<DataFilter(Filter Columns(expr(colname)),Set Select(0),Set Show(1),Set Include(1)))));
+		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal) <<Close;
+		eval(eval expr(guibox[ButtonBox(8)]
+			<<Sib Append(ButtonBox("RECALC CPK",updateCPKrow(expr(colname),expr(rno));))));
+		//eval(eval expr(limshb<<append(ButtonBox("::update specs",ReSpec(expr(colname))))));
+		
+		updateCPKRow(colname,rno);
+	);
+
+);
+
+
+lslboxChanged=Function({colname,rno},{Default Local},
+	//eval expr(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<remove ref line(expr(::pdicts[rno][colname]["LSL"])));
+	//eval expr(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<remove ref line(expr(::pdicts[rno][colname]["USL"])));
+	
+	newlsl=::pdicts[rno][colname]["lslbox"] <<get();
+	::pdicts[rno][colname]["LSL"]=newlsl;
+);
+
+uslboxChanged=Function({colname,rno},{Default Local},
+	newusl=::pdicts[rno][colname]["uslbox"] <<get();
+	::pdicts[rno][colname]["USL"]=newusl;
+);
+
+
+reSpec=Function({colname,rno},{Default Local},
+	
+	print("begin respec");
+	setAxis(colname,rno);
+	newprops= eval expr({
+			LSL(expr(::pdicts[rno][colname]["LSL"])),
+			USL(expr(::pdicts[rno][colname]["USL"])),
+			TARGET(.),
+			Show Limits(1),
+			Add Ref Line(expr(::pdicts[rno][colname]["LSL"]),0,5,"LSL");
+			Add Ref Line(expr(::pdicts[rno][colname]["USL"]),0,5,"USL");
+			Print("I'm an axis property!!");
+	});
+	column(htab,colname)<<Delete Property("Spec Limits");
+	eval(eval expr(column(htab,colname)<<Set Property("Spec Limits",expr(newprops))));
+	column(htab,concat(colname,"_FAILBOOL")) <<EvalFormula();
+	column(htab,concat(colname,"_FAILPCT")) <<EvalFormula();
+	//htab << RunFormulas();
+	//htab << Rerun Formulas;
+	
+	print("end respec");
+	updateCPKrow(colname,rno);
+);
+
+setAxis=Function({colname,rno},{Default Local},
+	((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Save To Column Property;
+	
+	//Print(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script);
+	col=column(Data Table("HORIZONTAL"),colname);
+	
+	ax script=((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script;
+	clean ax script={};
+	for (a=1, a<=n items(ax script), a+=1,
+		if (headname(ax script[a])!="Add Ref Line",
+			clean ax script[N Items(clean ax script)+1]=ax script[a];
+			);
+	);
+	eval(eval expr(col<< Set Property("Axis", expr(clean ax script))));
+	
+);
+
+updateCPKrow=Function({colname,rno},{Default Local},
+	Print("me");
+	col=column(Data Table("Horizontal"),colname);
+	
+	Summarize(mu=Mean(col),sigma=Std Dev(col));
+	
+	cpu=(::pdicts[rno][colname]["USL"]-mu)/(3*sigma);
+	cpl=(mu-::pdicts[rno][colname]["LSL"])/(3*sigma);
+	//cpk=min(cpu,cpl);
+	
+	::pdicts[rno][colname]["meanbox"]<<set text(char(mu,7,3));
+	::pdicts[rno][colname]["cplbox"]<<set text(char(round(cpl,3)));
+	::pdicts[rno][colname]["cpubox"]<<set text(char(round(cpu,3)));
+	//char(cpk);
+	"HI"
+);
+
+//specialFilter=Function({colname,rno},{Default Local},
+//	Data Table("Horizontal") << DataFilter(Filter Columns(colname))
+//);

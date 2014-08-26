@@ -1,0 +1,104 @@
+Names Default To Here(1);
+generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
+	// Generate table for specific parameters
+	fulltab=Open("saved_data/"||dataname||".jmp",Private);
+	:WAFER << Set Modeling Type(Ordinal);
+	
+	if(not(N Items(whichparams)),
+		Write("Listing Parameters...\!N");
+		all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
+		Write("Done listing parameters.\!N");
+		New Window(<<Modal,whichparambox=ListBox(all params));
+		whichparams=whichparambox<<Get Selected;
+	);
+	
+	Write("Generating horizontal data for specific parameters...\!N");
+	fulltab<<select where(contains(whichparams,:parameter));
+	ptab=fulltab<<subset(selected,Private);
+	Close(fulltab,No Save);
+
+	// Make table horizontal
+	phtab=ptab<<
+		Split(
+			Split By( :PARAMETER ),
+			Split( :VALUE ),
+			Output Table( "Pre-Join Horizontal" ),
+			Remaining Columns( Keep(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD ) ),
+			Private
+		);
+	Close(ptab,No Save);
+
+	// Add in limits
+	Write("Adding Spec Limits\!N");
+	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
+	//dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp");
+	include("populateSpecs.jsl");
+	populateSpecs(phtab,dtLimits);
+	//Close(dtLimits,No Save);
+
+	// Add in WAT key data
+	Write("Adding WAT Key data\!N");
+	dtWAT=Open("saved_data/WAT_Key.jmp",Private);
+	htab=dtWAT << Join(
+		With( phtab ),
+		By Matching Columns( :WAT_FILE_KEY = :WAT_FILE_KEY ),
+		Drop multiples( 0, 0 ),
+		Name( "Include non-matches" )(0, 0),
+		Preserve main table order( 1 ),
+		Output Table( "HORIZONTAL" ),
+		//Invisible
+		//Private
+	);
+	Close(dtWAT, No Save);
+	Close(phtab, No Save);
+	htab << Begin Data Update;
+	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
+	htab << New Column("ColorMap", Numeric,Formula(Match(:Coord_CAT, "0_3", 1, "0_-4", 1, "-1_0", 2, "3_0", 1, "-4_0", 1, "0_0", 2, "2_2", 1, "2_-3", 1, "-3_-3", 1, "-3_2", 1, "0_2", 2, "2_0", 2, "0_-2", 2, "-2_0", 2, "0_-3", 1, "-1_-2", 1, "1_-2", 1, "3_-2", 1, "-2_-1", 1, "0_-1", 2, "2_-1", 2, "-3_0", 1, "1_0", 2, "-2_1", 1, "0_1", 2, "2_1", 2, "4_1", 1, "-1_2", 2, "1_2", 2, "3_2", 1, "-2_3", 1, "2_3", 1, "-1_4", 1, "1_4", 1)));
+	htab << Color By Column("ColorMap");
+	htab << End Data Update;
+	
+	Write("Cleaning column names\!N");
+	include("cleanName.jsl");
+	For (c=1,c<=N Items(whichparams),c+=1,
+		dirty name=whichparams[c];
+		cleaned name=cleanName(whichparams[c]);
+		whichparams[c]=cleaned name;
+		column(htab,dirty name)<< Set Name(cleaned name);
+	);
+	
+	//eval(eval expr(htab << New Table Variable("NRows",expr(NRow(htab<<Get Row States)))));
+	
+	Write("Creating Failure columns...\!N");
+	htab << Begin Data Update;
+	// Create the failbool columns
+	For( p=1, p<=N Items(whichparams), p+=1,
+		colname=whichparams[p];
+		failbool_colname=colname||"_FAILBOOL";
+		failpct_colname=colname||"_FAILPCT";
+		
+		formulabool= eval expr(
+			(( expr(parse(colname)) < (expr(parse(colname))<<Get Property("Spec Limits"))["LSL"])
+			|
+			( expr(parse(colname)) > (expr(parse(colname))<<Get Property("Spec Limits"))["USL"])) 	
+			);
+			
+		formulapct= eval expr(
+			col mean(expr(parse(failbool_colname)),:WAFER, :LOT_ID, :PCM_SPEC)
+		);
+		//show(formula);
+		htab << New Column(
+			failbool_colname,
+			Formula(nameexpr(formulabool))
+		);
+		htab << New Column(
+			failpct_colname,
+			Formula(nameexpr(formulapct))
+		);
+	);
+		
+	htab << RunFormulas();
+	htab << End Data Update;
+	
+	Write("Done generating horizontal table.\!N");
+	eval list({htab,whichparams,dtLimits});
+);

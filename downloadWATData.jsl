@@ -1,0 +1,128 @@
+Names Default To Here(1);
+
+downloadWATData=Function( {dataname},{Default Local},
+
+	if (not(directory exists("saved_data")),
+		create directory("saved_data"););
+
+	datdir="http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/";
+
+	// Get the zip data from the website
+	Write("Getting main data...\!N");
+	zipdt = open(datdir||dataname||".txt.zip",Zip);
+	zip_member_list = zipdt << dir;
+	zip_file = zipdt << read(zip_member_list[1], format(blob));
+	dtRaw=Open(
+		zip_file,
+		columns(
+			Column( "WAT_FILE_KEY", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "PARAMETER", Character, Nominal ),
+			Column( "UNITS", Character, Nominal ),
+			Column( "WAFER", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "SITE", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "XCOORD", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "YCOORD", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "VALUE", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "LOW_LIM", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "HIGH_LIM", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "LOW_VALID", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "HIGH_VALID", Numeric, Continuous, Format( "Best", 10 ) )
+		),
+		Import Settings(
+			End Of Line( CRLF, CR, LF ),
+			End Of Field( Tab, Comma, CSV( 1 ) ),
+			Strip Quotes( 1 ),
+			Use Apostrophe as Quotation Mark( 0 ),
+			Scan Whole File( 1 ),
+			Treat empty columns as numeric( 0 ),
+			CompressNumericColumns( 0 ),
+			CompressCharacterColumns( 0 ),
+			CompressAllowListCheck( 0 ),
+			Labels( 1 ),
+			Column Names Start( 1 ),
+			Data Starts( 2 ),
+			Lines To Read( "All" ),
+			Year Rule( "20xx" )
+		)
+	);
+	close(dtRaw,Save("saved_data/"||dataname||".jmp"));
+	
+	// Load the limit data
+	Write("Getting limit data...\!N");
+	dtLimits=Open(
+		datdir||dataname||".LIMITS.txt",
+		columns(
+			Column( "PARAMETER", Character, Nominal ),
+			Column( "UNITS", Character, Nominal ),
+			Column( "SPEC_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "SPEC_HIGH", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "VALID_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "VALID_HIGH", Numeric, Continuous, Format( "Best", 10 ) )
+		),
+		Import Settings(
+			End Of Line( CRLF, CR, LF ),
+			End Of Field( Tab, Comma, CSV( 1 ) ),
+			Strip Quotes( 1 ),
+			Use Apostrophe as Quotation Mark( 0 ),
+			Scan Whole File( 1 ),
+			Treat empty columns as numeric( 0 ),
+			CompressNumericColumns( 0 ),
+			CompressCharacterColumns( 0 ),
+			CompressAllowListCheck( 0 ),
+			Labels( 1 ),
+			Column Names Start( 1 ),
+			Data Starts( 2 ),
+			Lines To Read( "All" ),
+			Year Rule( "20xx" )
+		)
+	);
+	dtLimits << New Column( "AXIS_LOW", Numeric, Continuous, Format("Best",10));
+	dtLimits << New Column( "AXIS_HIGH", Numeric, Continuous, Format("Best",10));
+	dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
+	dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
+	Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
+	
+	
+	// Open the WAT Key table
+	Write("Getting WAT key data...\!N");
+	keyname="DEVELOPMENT_WAT_KEY_TABLE.txt";
+	Open(
+		datdir||keyname,
+		columns(
+			Column( "WAT_FILE_KEY", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "FILE", Character, Nominal ),
+			Column( "INT_FILE_NAME", Character, Nominal ),
+			Column( "LOT_ID", Character, Nominal ),
+			Column( "TYPE_NO", Character, Nominal ),
+			Column( "PROCESS", Character, Nominal ),
+			Column( "PCM_SPEC", Character, Nominal ),
+			Column( "DATE", Character, Nominal ),
+			Column( "EQUIP", Character, Nominal ),
+			Column(
+				"INSERT_TIMESTAMP",
+				Numeric,
+				Continuous,
+				Format( "y/m/d h:m:s", 22, 0 ),
+				Input Format( "y/m/d h:m:s", 0 )
+			)
+		),
+		Import Settings(
+			End Of Line( CRLF, CR, LF ),
+			End Of Field( Tab, Comma, CSV( 1 ) ),
+			Strip Quotes( 1 ),
+			Use Apostrophe as Quotation Mark( 0 ),
+			Scan Whole File( 1 ),
+			Treat empty columns as numeric( 0 ),
+			CompressNumericColumns( 0 ),
+			CompressCharacterColumns( 0 ),
+			CompressAllowListCheck( 0 ),
+			Labels( 1 ),
+			Column Names Start( 1 ),
+			Data Starts( 2 ),
+			Lines To Read( "All" ),
+			Year Rule( "20xx" )
+		)
+	);
+	Close(keyname,Save("saved_data/WAT_Key.jmp"));
+	Write("Done fetching data.\!N");
+);
