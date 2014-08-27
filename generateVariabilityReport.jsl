@@ -7,7 +7,7 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 	rno=N Items(::pdicts)+1;
 	Show(rno);
 	::pdicts[rno]=Associative Array();
-	
+	::pdicts[rno]["htab"]=htab;
 	
 	cd = Column Dialog(
 		xvars = ColList("X Variables",Columns(:PCM_SPEC, :LOT_ID, :WAFER)),
@@ -262,6 +262,7 @@ reSpec=Function({colname,rno},{Default Local},
 			Add Ref Line(expr(::pdicts[rno][colname]["USL"]),0,5,"USL");
 			Print("I'm an axis property!!");
 	});
+	htab=::pdicts[rno]["htab"];
 	column(htab,colname)<<Delete Property("Spec Limits");
 	eval(eval expr(column(htab,colname)<<Set Property("Spec Limits",expr(newprops))));
 	column(htab,concat(colname,"_FAILBOOL")) <<EvalFormula();
@@ -277,7 +278,7 @@ setAxis=Function({colname,rno},{Default Local},
 	((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Save To Column Property;
 	
 	//Print(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script);
-	col=column(Data Table("HORIZONTAL"),colname);
+	col=column(::pdicts[rno]["htab"],colname);
 	
 	ax script=((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script;
 	clean ax script={};
@@ -291,8 +292,8 @@ setAxis=Function({colname,rno},{Default Local},
 );
 
 updateCPKrow=Function({colname,rno},{Default Local},
-	Print("me");
-	col=column(Data Table("Horizontal"),colname);
+	Print("Updating CPK");
+	col=column(::pdicts[rno]["htab"],colname);
 	
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
 	
