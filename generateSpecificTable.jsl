@@ -89,7 +89,8 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 				Suppress Hidden Rows( 1 ),
 				Suppress Hidden Columns( 1 ),
 				Treat as Hierarchy( 0 )
-			)
+			),
+			Private
 		);
 
 		splittab columns=splittab<<Get Column Names;
@@ -124,7 +125,8 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 					Preserve Main Table Order(1),
 					Suppress Formula Evaluation(1),
 					Include Non Matches(1,0),
-					Output Table Name("Joined Horizontal")
+					Output Table Name("Joined Horizontal"),
+					Invisible
 			));
 			Show(joinexpr);
 			eval(joinexpr);
