@@ -220,8 +220,23 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		eval(eval expr(cpkhb<<append(
 			::pdicts[expr(rno)][expr(colname)]["cpubox"]=
 				TextBox("Hit Calc";))));
-		slob<<append(extrahb=HListBox());
-		eval(eval expr(extrahb<<append(ButtonBox("Hold Scales",setAxis(expr(colname),expr(rno))))));
+		slob<<append(medhb=HListBox());
+		
+		eval(eval expr(
+		t=htab<<Tabulate(
+			Show Control Panel( 0 ),
+			Add Table(
+				Column Table( Analysis Columns( expr(column(htab,colname) ) ) ),
+				Row Table( Statistics( Median) )
+			),
+			<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
+		)));
+		med=Column(DataTable("Stats"),colname)[1];
+		t<<Close Window();
+		Close("Stats",NoSave);
+		medhb<<append(TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)));
+		//slob<<append(extrahb=HListBox());
+		eval(eval expr(buthb<<append(ButtonBox("Hold Scales",setAxis(expr(colname),expr(rno))))));
 		//eval(eval expr(cpkhb<<append(
 		//	specialFilter(expr(colname),expr(rno)))));
 		
@@ -281,7 +296,6 @@ reSpec=Function({colname,rno},{Default Local},
 setAxis=Function({colname,rno},{Default Local},
 	((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Save To Column Property;
 	
-	//Print(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script);
 	col=column(::pdicts[rno]["htab"],colname);
 	
 	ax script=((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script;
@@ -303,15 +317,8 @@ updateCPKrow=Function({colname,rno},{Default Local},
 	
 	cpu=(::pdicts[rno][colname]["USL"]-mu)/(3*sigma);
 	cpl=(mu-::pdicts[rno][colname]["LSL"])/(3*sigma);
-	//cpk=min(cpu,cpl);
 	
-	::pdicts[rno][colname]["meanbox"]<<set text(char(mu,7,3));
+	::pdicts[rno][colname]["meanbox"]<<set text(Format(mu,"Best",7));
 	::pdicts[rno][colname]["cplbox"]<<set text(char(round(cpl,3)));
 	::pdicts[rno][colname]["cpubox"]<<set text(char(round(cpu,3)));
-	//char(cpk);
-	//"HI"
 );
-
-//specialFilter=Function({colname,rno},{Default Local},
-//	Data Table("Horizontal") << DataFilter(Filter Columns(colname))
-//);
