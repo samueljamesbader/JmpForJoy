@@ -7,9 +7,16 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
 		all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
+		//all params={ "1", "2", "3"};
 		Write("Done listing parameters.\!N");
-		New Window(<<Modal,whichparambox=ListBox(all params));
+		New Window(<<Modal,
+			VListBox(
+			whichparambox=ListBox(all params)
+			,specialanalysisbox=CheckBox("Special Analysis"))
+				
+			);
 		whichparams=whichparambox<<Get Selected;
+		specialanalysis=specialanalysisbox<<Get();
 	);
 	
 	if(not(N Items(whichparams)),
@@ -36,7 +43,6 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	// Add in limits
 	Write("Adding Spec Limits\!N");
 	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
-	//dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp");
 	include("populateSpecs.jsl");
 	populateSpecs(phtab,dtLimits);
 	//Close(dtLimits,No Save);
@@ -58,13 +64,6 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	Close(phtab, No Save);
 	
 	Write("Cleaning column names\!N");
-	include("cleanName.jsl");
-	For (c=1,c<=N Items(whichparams),c+=1,
-		dirty name=whichparams[c];
-		cleaned name=cleanName(whichparams[c]);
-		whichparams[c]=cleaned name;
-		column(htab,dirty name)<< Set Name(cleaned name);
-	);
 	
 	splits file="splits\splits.xlsx";
 	if(file exists(splits file),
@@ -112,7 +111,7 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 			for(i=1, i<=nitems(splittab columns), i+=1,
 				insert into(select with expr, column(splittab,splittab columns[i]));
 			);
-			Show(select with expr);
+			//Show(select with expr);
 			
 			select with expr expr=expr(name expr(select with expr));
 			select expr expr=expr(name expr(select expr));
@@ -128,7 +127,7 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 					Output Table Name("Joined Horizontal"),
 					Invisible
 			));
-			Show(joinexpr);
+			//Show(joinexpr);
 			eval(joinexpr);
 			close(htab, No Save);
 			htab=newhtab;
@@ -141,13 +140,15 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
-	htab << New Column("ColorMap", Numeric,Formula(
+	htab << New Column("OldColorMap", Numeric,Formula(
 		Match(:Coord_CAT, "0_3", 1, "0_-4", 1, "-1_0", 2, "3_0", 1, "-4_0", 1,
 		"0_0", 2, "2_2", 1, "2_-3", 1, "-3_-3", 1, "-3_2", 1, "0_2", 2, "2_0", 2,
 		"0_-2", 2, "-2_0", 2, "0_-3", 1, "-1_-2", 1, "1_-2", 1, "3_-2", 1,
 		"-2_-1", 1, "0_-1", 2, "2_-1", 2, "-3_0", 1, "1_0", 2, "-2_1", 1,
 		"0_1", 2, "2_1", 2, "4_1", 1, "-1_2", 2, "1_2", 2, "3_2", 1, "-2_3",
 		1, "2_3", 1, "-1_4", 1, "1_4", 1, "0_4", 1)));
+	htab<< New Column("ColorMap", Numeric, Formula(
+		If(Abs(:XCOORD)+Abs(:YCOORD)<=4,2,1)));
 	htab << Color By Column("ColorMap");
 	htab << End Data Update;
 	
@@ -184,5 +185,5 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	htab << End Data Update;
 	
 	Write("Done generating horizontal table.\!N");
-	eval list({htab,whichparams,dtLimits});
+	eval list({htab,whichparams,specialanalysis,dtLimits});
 );

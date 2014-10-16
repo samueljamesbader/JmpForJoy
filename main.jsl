@@ -9,11 +9,11 @@ do download=0;
 //whichparams={"N.35x5.2_CBO@1UA","N.35x5.2_CES@1UA","N.35x5.2_EBO@1UA"};
 
 // Bipolar WAT M3
-//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";
+dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";
 //whichparams={"AN041_IB_0.5_2","NHSX50_IC_0.8V"};
 
 // MOS WAT
-dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";
+//dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";
 //whichparams={"BV_N4_V 10/.18"};
 
 // Keithley
@@ -35,7 +35,7 @@ if (do download,
 // Generate horizontal table
 include("generateSpecificTable.jsl");
 Show(whichparams);	
-{htab,params,dtLimits}=generateSpecificTable(dataname,whichparams);
+{htab,params,isspecial,dtLimits}=generateSpecificTable(dataname,whichparams);
 
 // Generate the actual report
 ::pdicts={};
