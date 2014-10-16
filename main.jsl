@@ -40,4 +40,4 @@ Show(whichparams);
 // Generate the actual report
 ::pdicts={};
 include("generateVariabilityReport.jsl");
-generateVariabilityReport(htab,params,dtLimits);
+generateVariabilityReport(htab,params,isspecial,dtLimits);

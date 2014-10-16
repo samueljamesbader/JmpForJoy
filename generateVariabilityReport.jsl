@@ -1,26 +1,29 @@
-Write("PDICTs IS GLOBAL!!!\!N");
+//Write("PDICTs IS GLOBAL!!!\!N");
 
 
 							
-generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
+generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Local},
 
 	rno=N Items(::pdicts)+1;
-	Show(rno);
+	//Show(rno);
 	::pdicts[rno]=Associative Array();
 	::pdicts[rno]["htab"]=htab;
 	
-	cd = Column Dialog(
-		xvars = ColList("X Variables",Columns(:PCM_SPEC, :LOT_ID, :WAFER)),
-		xgroupers =  ColList("X Grouping"),
+	If(isspecial,
+		cd = Column Dialog(
+			xvars = ColList("X Variables",Columns(:WAFER)),
+			xgroupers =  ColList("X Grouping",Columns(:PCM_SPEC, :LOT_ID)),
+		);
+		xvars=cd["xvars"];
+		xgroupers=cd["xgroupers"];
+		,
+		xvars= List(:WAFER);
+		xgroupers= List(:PCM_SPEC, :LOT_ID);
 	);
-	xvars=cd["xvars"];
-	xgroupers=cd["xgroupers"];
-	//xvars= List(:PCM_SPEC, :LOT_ID, :WAFER);
-	//xgroupers= List(:XCOORD);
 	if(n items(xvars),
 		primary xvar=xvars[1]<<get name;,
 		primary xvar="";);
-	Show(primary xvar);
+	//Show(primary xvar);
 	win=New Window("Variability",
 		vb=V List Box());
 
@@ -39,8 +42,8 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 		::pdicts[rno][colname]["script"]=eval expr(
 			Handle( .5, ::pdicts[expr(rno)][expr(colname)]["LSL"],
 			
-				print("::up");
-				print(::up);
+				//print("::up");
+				//print(::up);
 				if(::up,print("doing nothing");::up=0;Stop();,
 					print("doing something");
 					print("staring lsl handle script");
@@ -52,10 +55,10 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 				);,
 				
 				::up=1;
-				print("respecing");
+				//print("respecing");
 				reSpec(expr(colname),expr(rno));
 				//updateCPKrow(expr(colname),expr(rno));
-				print("done respecing");
+				//print("done respecing");
 				::up=0;
 			);
 			Handle( .5,::pdicts[expr(rno)][expr(colname)]["USL"],
@@ -72,14 +75,14 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 					uslboxChanged(expr(colname),expr(rno));
 				);,
 				
-				::up=1;
-				print("respecing");
-				::dog=6;
+				//::up=1;
+				//print("respecing");
+				//::dog=6;
 				reSpec(expr(colname),expr(rno));
 				//updateCPKrow(expr(colname),expr(rno));
-				print("done respecing");
-				::dog=7;
-				::up=0;
+				//print("done respecing");
+				//::dog=7;
+				//::up=0;
 			);
 			//Text(Center Justified,{5,5},Char(::pdicts[expr(rno)][expr(colname)]["USL"]));
 			//Text(Center Justified,{5,5},Print("WHAT"););
@@ -101,7 +104,7 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 			insertinto(xvarexpr,
 				eval expr(Group X(expr(xgroupers[i]))));
 		);
-		Show(xvarexpr);
+		//Show(xvarexpr);
 		xvarexprexpr=expr(nameexpr(xvarexpr));
 		
 		
@@ -110,6 +113,7 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 				Size( 560, 590 ),
 				Show Control Panel( 0 ),
 				Show Legend( 0 ),
+				X Group Edge( "Bottom" ),
 				expr(xvarexprexpr),
 				Relative Sizes( "Y", [1 7] ),
 				Elements(
@@ -145,12 +149,12 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 						ScaleBox,
 						{Format( "Percent", 10, 3 )}
 					),
-					Dispatch(
-						{},
-						expr(primary xvar),
-						ScaleBox,
-						{Show Major Grid( 1 )}
-					),
+					//Dispatch(
+					//	{},
+					//	expr(primary xvar),
+					//	ScaleBox,
+					//	{Show Major Grid( 1 )}
+					//),
 					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
 					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
 					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
@@ -158,7 +162,7 @@ generateVariabilityReport=Function({htab,params,dtLimits},{Default Local},
 			)
 		);
 
-		show(vargraph);
+		//show(vargraph);
 
 		eval(eval expr(vb<<append(::pdicts[rno][colname]["graph"]=expr(name expr(vargraph)))));
 		
@@ -292,7 +296,7 @@ setAxis=Function({colname,rno},{Default Local},
 );
 
 updateCPKrow=Function({colname,rno},{Default Local},
-	Print("Updating CPK");
+	Write("Updating CPK\!N");
 	col=column(::pdicts[rno]["htab"],colname);
 	
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
@@ -305,7 +309,7 @@ updateCPKrow=Function({colname,rno},{Default Local},
 	::pdicts[rno][colname]["cplbox"]<<set text(char(round(cpl,3)));
 	::pdicts[rno][colname]["cpubox"]<<set text(char(round(cpu,3)));
 	//char(cpk);
-	"HI"
+	//"HI"
 );
 
 //specialFilter=Function({colname,rno},{Default Local},
