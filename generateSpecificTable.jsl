@@ -1,12 +1,14 @@
 Names Default To Here(1);
 generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	// Generate table for specific parameters
+	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
 	fulltab=Open("saved_data/"||dataname||".jmp",Private);
 	:WAFER << Set Modeling Type(Nominal);
 	
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
-		all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
+		//all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
+		all params=column(dtLimits,"Parameter")<<Get Values;
 		//all params={ "1", "2", "3"};
 		Write("Done listing parameters.\!N");
 		New Window(<<Modal,
@@ -42,7 +44,6 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 
 	// Add in limits
 	Write("Adding Spec Limits\!N");
-	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
 	include("populateSpecs.jsl");
 	populateSpecs(phtab,dtLimits);
 	//Close(dtLimits,No Save);
@@ -140,13 +141,6 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
-	htab << New Column("OldColorMap", Numeric,Formula(
-		Match(:Coord_CAT, "0_3", 1, "0_-4", 1, "-1_0", 2, "3_0", 1, "-4_0", 1,
-		"0_0", 2, "2_2", 1, "2_-3", 1, "-3_-3", 1, "-3_2", 1, "0_2", 2, "2_0", 2,
-		"0_-2", 2, "-2_0", 2, "0_-3", 1, "-1_-2", 1, "1_-2", 1, "3_-2", 1,
-		"-2_-1", 1, "0_-1", 2, "2_-1", 2, "-3_0", 1, "1_0", 2, "-2_1", 1,
-		"0_1", 2, "2_1", 2, "4_1", 1, "-1_2", 2, "1_2", 2, "3_2", 1, "-2_3",
-		1, "2_3", 1, "-1_4", 1, "1_4", 1, "0_4", 1)));
 	htab<< New Column("ColorMap", Numeric, Formula(
 		If(Abs(:XCOORD)+Abs(:YCOORD)<=4,2,1)));
 	htab << Color By Column("ColorMap");
