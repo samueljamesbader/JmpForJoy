@@ -76,10 +76,14 @@ downloadWATData=Function( {dataname},{Default Local},
 			Year Rule( "20xx" )
 		)
 	);
+	dtLimits << Sort(By(:PARAMETER),Order(Ascending),Replace Table);
 	dtLimits << New Column( "AXIS_LOW", Numeric, Continuous, Format("Best",10));
 	dtLimits << New Column( "AXIS_HIGH", Numeric, Continuous, Format("Best",10));
 	dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
 	dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
+	dtLimits << New Column( "VALUE_INVERT", Numeric, Continuous, Format("Best",10));
+	groundrules=include("prepwork/daveGroundRules.jsl",<<ParseOnly);
+	eval(groundrules);
 	Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
 	
 	

@@ -74,26 +74,58 @@ populateSpecs = Function( {dt, dt1},
 	clist = dt << GetColumnNames( Numeric, String );
 	For( r = 1, r <= N Rows( dt1 ), r++,
 		name = Column( dt1, "PARAMETER" )[r];
-		lsl = Column( dt1, "SPEC_LOW" )[r];
-		usl = Column( dt1, "SPEC_HIGH" )[r];
-		//tar = Column(dt1, "Target")[r];
-		tar = "";
-		
-		lal= Column(dt1,"AXIS_LOW")[r];
-		ual= Column(dt1,"AXIS_HIGH")[r];
-		inc= Column(dt1,"AXIS_INC")[r];
-		scale= Column(dt1,"AXIS_SCALE")[r];
-		
 		If( Contains( clist, name ),
-
-                      Eval( Eval Expr(	Column( dt, name )<< Set Property("Spec Limits",{LSL( Expr( lsl ) ), USL( Expr( usl ) ), Target( Expr( tar ) ), Show Limits( 1 )})  )  );
-                      Eval( Eval Expr(	Column( dt, name )<< Set Property("Axis",{MIN( Expr( lal ) ), MAX( Expr( ual ) ), INC( Expr( inc ) ), SCALE(Expr(scale))})  )  );
+			
+			scale= Column(dt1,"AXIS_SCALE")[r];
+			lal= Column(dt1,"AXIS_LOW")[r];
+			ual= Column(dt1,"AXIS_HIGH")[r];
+			inc= Column(dt1,"AXIS_INC")[r];
+			
+			If(Is Missing(lal),
+			eval(eval expr(
+				t=dt<<Tabulate(
+					Show Control Panel( 0 ),
+					Add Table(
+						Column Table( Analysis Columns( expr(column(dt,name) ) ) ),
+						Row Table( Statistics( Median, Interquartile Range ) )
+					),
+					<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
+				)));
+			med=Column(DataTable("Stats"),name)[1];
+			iqr=Column(DataTable("Stats"),name)[2];
+			t<<Close Window();
+			Close("Stats",NoSave);
+			
+			lal=med-3*iqr;
+			ual=med+3*iqr;
+			inc=(ual-lal)/7;
+			);
+			
+			If (Column(dt1,"VALUE_INVERT")[r],
+				Column(dt,name)<< Set Values(-1*(Column(dt,name)<<Get Values));
+				//Column(dt,name)<< Set Property("Inverted",1);
+				lsl = -Column( dt1, "SPEC_HIGH" )[r];
+				usl = -Column( dt1, "SPEC_LOW" )[r];
+				tar = "";
+				,
+				//Column(dt,name)<< Set Property("Inverted",0);
+				lsl = Column( dt1, "SPEC_LOW" )[r];
+				usl = Column( dt1, "SPEC_HIGH" )[r];
+				tar="";
+				);
+				
+			Eval( Eval Expr(
+				Column( dt, name )<< Set Property("Spec Limits",
+					{LSL( Expr( lsl ) ), USL( Expr( usl ) ), Target( Expr( tar ) ), Show Limits( 1 )})  )  );
+			Eval( Eval Expr(
+				Column( dt, name )<< Set Property("Axis",
+					{MIN( Expr( lal ) ), MAX( Expr( ual ) ), INC( Expr( inc ) ), SCALE(Expr(scale))})  )  );
 
 		);
 	);
 );
 
-include("cleanName.jsl");
+//include("cleanName.jsl");
 specsToTable=Function({dt,dtLim,param},{Default Local},
 
 	Print("about to update limits table.");
@@ -101,12 +133,18 @@ specsToTable=Function({dt,dtLim,param},{Default Local},
 	specs=column(dt,param)<<Get Property("spec limits");
 	ax=column(dt,param)<<Get Property("axis");
 	For(r=1, r<=N Rows(dtLim), r++,
-		dirtyname=Column(dtLim,"PARAMETER")[r];
+		name=Column(dtLim,"PARAMETER")[r];
 		//print(cleanName(dirtyName));
-		if (cleanName(dirtyname)==param,
+		if (name==param,
 			Print("Updating Limits Table");
-			Column(dtLim,"SPEC_LOW")[r]=specs["LSL"];
-			Column(dtLim,"SPEC_HIGH")[r]=specs["USL"];
+			inv=Column(dtLim,"VALUE_INVERT")[r];
+			If(inv,
+				Column(dtLim,"SPEC_LOW")[r]=-specs["USL"];
+				Column(dtLim,"SPEC_HIGH")[r]=-specs["LSL"];
+				,
+				Column(dtLim,"SPEC_LOW")[r]=specs["LSL"];
+				Column(dtLim,"SPEC_HIGH")[r]=specs["USL"];
+			);
 			Column(dtLim,"AXIS_LOW")[r]=ax["MIN"];
 			Column(dtLim,"AXIS_HIGH")[r]=ax["MAX"];
 			Column(dtLim,"AXIS_INC")[r]=ax["INC"];

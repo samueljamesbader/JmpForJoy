@@ -1,25 +1,24 @@
-
 For Each Row(
-	Axis_Scale=If(
-		Not(Is Missing(Regex(Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
+	:Axis_Scale=If(
+		Not(Is Missing(Regex(:Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
 		"Log",
 		"Linear"
 	);
-	Value_Invert=Or(
-		Not(Is Missing(Regex(Parameter,"(_ICO_-|_IEO_-|_IBO_-|_ILK_-|_IEBO_-|_LDT_-|_VR_-)"))),
-		Not(Is Missing(Regex(Parameter,"^AP.*(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)")))
+	:Value_Invert=Or(
+		Not(Is Missing(Regex(:Parameter,"(_ICO_-|_IEO_-|_IBO_-|_ILK_-|_IEBO_-|_LDT_-|_VR_-)"))),
+		Not(Is Missing(Regex(:Parameter,"^AP.*(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)")))
 		);
 		
-	Axis_Low=If(
-		Not(Is Missing(Regex(Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
+	:Axis_Low=If(
+		Not(Is Missing(Regex(:Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
 		1e-12
 	);
-	Axis_High=If(
-		Not(Is Missing(Regex(Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
+	:Axis_High=If(
+		Not(Is Missing(Regex(:Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
 		1e-3
 	);
-	Axis_Inc=If(
-		Not(Is Missing(Regex(Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
+	:Axis_Inc=If(
+		Not(Is Missing(Regex(:Parameter,"(_ICO|_IEO|_IBO|_ILK|_IEBO|_LDT|_VR)"))),
 		1
 	);
 );
