@@ -101,8 +101,13 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 			eval expr(Y(column(htab,expr(colname))))
 		);
 		for(i=1, i<=n items(xgroupers), i+=1,
-			insertinto(xvarexpr,
-				eval expr(Group X(expr(xgroupers[i]))));
+			if( Or((xgroupers[i]<<Get Name)=="LOT_ID",(xgroupers[i]<<Get Name)=="PCM_SPEC"),
+				insertinto(xvarexpr,
+					eval expr(Group X(expr(xgroupers[i]),
+						Order By( :TheDate, Ascending, Order Statistic( "Mean" ) ),
+						Show Title( 0 ) ))),
+				insertinto(xvarexpr,
+					eval expr(Group X(expr(xgroupers[i])))))
 		);
 		//Show(xvarexpr);
 		xvarexprexpr=expr(nameexpr(xvarexpr));
@@ -110,12 +115,12 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		
 		vargraph=eval expr(
 			Graph Builder(
-				Size( 560, 590 ),
+				Size( 850, 590 ),
 				Show Control Panel( 0 ),
 				Show Legend( 0 ),
 				X Group Edge( "Bottom" ),
 				expr(xvarexprexpr),
-				Relative Sizes( "Y", [1 7] ),
+				Relative Sizes( "Y", [1 3] ),
 				Elements(
 					Position( 1, 1 ),
 					Line(
@@ -147,7 +152,7 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 						{},
 						expr(fail_colname),
 						ScaleBox,
-						{Format( "Percent", 10, 3 )}
+						{Format( "Percent", 10, 0 )}
 					),
 					//Dispatch(
 					//	{},

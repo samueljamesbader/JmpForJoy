@@ -141,9 +141,11 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
-	htab<< New Column("ColorMap", Numeric, Formula(
-		If(Abs(:XCOORD)+Abs(:YCOORD)<=4,2,1)));
-	htab << Color By Column("ColorMap");
+	htab<< New Column("ColorMap", Nominal, Formula(
+		If(And(Abs(:XCOORD+.5)<=2,Abs(:YCOORD+.5)<=2),"Center","Edge")));
+	(htab << Select Where( :ColorMap == "Center"))<<Colors("Red");
+	(htab << Select Where( :ColorMap == "Edge"))<<Colors("Blue");
+	//htab << Color By Column("ColorMap");
 	htab << End Data Update;
 	
 	
@@ -174,7 +176,11 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 			Formula(nameexpr(formulapct))
 		);
 	);
-		
+	
+	
+	htab << New Column("the date", Numeric, Continuous, Format("Best", 12),
+		Formula(Parse Date(:DATE, "YYYY-MM-DD")));
+	
 	htab << RunFormulas();
 	htab << End Data Update;
 	

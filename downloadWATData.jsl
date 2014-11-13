@@ -1,6 +1,6 @@
 Names Default To Here(1);
 
-downloadWATData=Function( {dataname},{Default Local},
+downloadWATData=Function( {dataname, getlimits},{Default Local},
 
 	if (not(directory exists("saved_data")),
 		create directory("saved_data"););
@@ -48,43 +48,45 @@ downloadWATData=Function( {dataname},{Default Local},
 	close(dtRaw,Save("saved_data/"||dataname||".jmp"));
 	
 	// Load the limit data
-	Write("Getting limit data...\!N");
-	dtLimits=Open(
-		datdir||dataname||".LIMITS.txt",
-		columns(
-			Column( "PARAMETER", Character, Nominal ),
-			Column( "UNITS", Character, Nominal ),
-			Column( "SPEC_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
-			Column( "SPEC_HIGH", Numeric, Continuous, Format( "Best", 10 ) ),
-			Column( "VALID_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
-			Column( "VALID_HIGH", Numeric, Continuous, Format( "Best", 10 ) )
-		),
-		Import Settings(
-			End Of Line( CRLF, CR, LF ),
-			End Of Field( Tab, Comma, CSV( 1 ) ),
-			Strip Quotes( 1 ),
-			Use Apostrophe as Quotation Mark( 0 ),
-			Scan Whole File( 1 ),
-			Treat empty columns as numeric( 0 ),
-			CompressNumericColumns( 0 ),
-			CompressCharacterColumns( 0 ),
-			CompressAllowListCheck( 0 ),
-			Labels( 1 ),
-			Column Names Start( 1 ),
-			Data Starts( 2 ),
-			Lines To Read( "All" ),
-			Year Rule( "20xx" )
-		)
+	If( getlimits,
+		Write("Getting limit data...\!N");
+		dtLimits=Open(
+			datdir||dataname||".LIMITS.txt",
+			columns(
+				Column( "PARAMETER", Character, Nominal ),
+				Column( "UNITS", Character, Nominal ),
+				Column( "SPEC_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
+				Column( "SPEC_HIGH", Numeric, Continuous, Format( "Best", 10 ) ),
+				Column( "VALID_LOW", Numeric, Continuous, Format( "Best", 10 ) ),
+				Column( "VALID_HIGH", Numeric, Continuous, Format( "Best", 10 ) )
+			),
+			Import Settings(
+				End Of Line( CRLF, CR, LF ),
+				End Of Field( Tab, Comma, CSV( 1 ) ),
+				Strip Quotes( 1 ),
+				Use Apostrophe as Quotation Mark( 0 ),
+				Scan Whole File( 1 ),
+				Treat empty columns as numeric( 0 ),
+				CompressNumericColumns( 0 ),
+				CompressCharacterColumns( 0 ),
+				CompressAllowListCheck( 0 ),
+				Labels( 1 ),
+				Column Names Start( 1 ),
+				Data Starts( 2 ),
+				Lines To Read( "All" ),
+				Year Rule( "20xx" )
+			)
+		);
+		dtLimits << Sort(By(:PARAMETER),Order(Ascending),Replace Table);
+		dtLimits << New Column( "AXIS_LOW", Numeric, Continuous, Format("Best",10));
+		dtLimits << New Column( "AXIS_HIGH", Numeric, Continuous, Format("Best",10));
+		dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
+		dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
+		dtLimits << New Column( "VALUE_INVERT", Numeric, Continuous, Format("Best",10));
+		groundrules=include("prepwork/daveGroundRules.jsl",<<ParseOnly);
+		eval(groundrules);
+		Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
 	);
-	dtLimits << Sort(By(:PARAMETER),Order(Ascending),Replace Table);
-	dtLimits << New Column( "AXIS_LOW", Numeric, Continuous, Format("Best",10));
-	dtLimits << New Column( "AXIS_HIGH", Numeric, Continuous, Format("Best",10));
-	dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
-	dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
-	dtLimits << New Column( "VALUE_INVERT", Numeric, Continuous, Format("Best",10));
-	groundrules=include("prepwork/daveGroundRules.jsl",<<ParseOnly);
-	eval(groundrules);
-	Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
 	
 	
 	// Open the WAT Key table

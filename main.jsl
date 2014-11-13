@@ -3,6 +3,7 @@ Names Default To Here(1);
 
 whichparams={};
 do download=0;
+get limits=0;
 
 // OLD Keithley
 //dataname="018A3P6M3318XF4C_falcon_pc11_dual_a1.in_D65946";
@@ -10,6 +11,7 @@ do download=0;
 
 // Bipolar WAT M3
 dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";
+//whichparams={"AN041_IB_0.5_2"};
 //whichparams={"AN041_IB_0.5_2","NHSX50_IC_0.8V"};
 
 // MOS WAT
@@ -30,7 +32,8 @@ Close All(Reports);
 // Download if necessary
 if (do download,
 	include("downloadWATData.jsl");
-	downloadWATData(dataname););
+	downloadWATData(dataname, get limits);
+);
 
 // Generate horizontal table
 include("generateSpecificTable.jsl");
