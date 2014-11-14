@@ -1,10 +1,11 @@
 Names Default To Here(1);
-generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
+generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 	// Generate table for specific parameters
 	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
 	fulltab=Open("saved_data/"||dataname||".jmp",Private);
 	:WAFER << Set Modeling Type(Nominal);
 	
+	specialanalysis=0;
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
 		//all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
@@ -141,8 +142,11 @@ generateSpecificTable=Function({dataname,whichparams={}},{Default Local},
 	
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
-	htab<< New Column("ColorMap", Nominal, Formula(
-		If(And(Abs(:XCOORD+.5)<=2,Abs(:YCOORD+.5)<=2),"Center","Edge")));
+	include("mapCenterEdge.jsl");
+	ce map=::CE Maps[wafermap] ;
+	ce formula=eval expr(if(expr(ce map)[:Coord_CAT],"Edge","Center"));
+	eval( eval expr(
+		htab<< New Column("ColorMap", Character, Nominal, Formula(name expr(ce formula)))));
 	(htab << Select Where( :ColorMap == "Center"))<<Colors("Red");
 	(htab << Select Where( :ColorMap == "Edge"))<<Colors("Blue");
 	//htab << Color By Column("ColorMap");
