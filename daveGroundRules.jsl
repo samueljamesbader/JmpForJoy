@@ -1,0 +1,83 @@
+// Applies Dave's rules for default limits to the open table
+
+
+
+// This function just returns true iff the string matches the regex pattern
+Matches Pattern=Function({string, pattern},{Default Local},
+	Not(Is Missing(Regex(string,pattern)))
+);
+
+
+// For WAT data
+// The rules are:
+// -If it contains the following, ICO IEO IBO ICBO ILK IEBO LDT VR, then log scale, else linear
+// -If it's log scale, and the above is followed by a negative number, or the item starts with
+//  AP, then invert the values
+// -If log scale, then default lower axis limit is 1e-12
+// -If log scale, then default upper axis limit is 1e-3
+// -If log scale, then default upper axis increment is 1
+// -If it's linear scale, then leave the limits unset, so that the script will supply default
+//  values based on the data itself.
+If(groundruleskey=="WAT",
+	For Each Row(
+		:Axis_Scale=If(
+			Matches Pattern(:Parameter,"(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)"),
+			"Log",
+			"Linear"
+		);
+		:Value_Invert=Or(
+			Matches Pattern(:Parameter,"(_ICO_-|_IEO_-|_IBO_-|_ICBO-|_ILK_-|_IEBO_-|_LDT_-|_VR_-)"),
+			Matches Pattern(:Parameter,"^AP.*(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)")
+			);
+			
+		:Axis_Low=If(
+			Matches Pattern(:Parameter,"(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)"),
+			1e-12
+		);
+		:Axis_High=If(
+			Matches Pattern(:Parameter,"(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)"),
+			1e-3
+		);
+		:Axis_Inc=If(
+			Matches Pattern(:Parameter,"(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)"),
+			1
+		);
+	);
+);
+
+// For Keithley data
+// The rules are:
+// -If it contains the following, ICEO ICBO IEBO IL IEO IBO ICO, then log scale, else linear
+// -If [it starts with P and contains ICEO, ICBO, IEBO, IL, or IEO] or [it starts with SHT
+//  and contains LEAK], then invert value
+// -If log scale, then default lower axis limit is 1e-12
+// -If log scale, then default upper axis limit is 1e-3
+// -If log scale, then default upper axis increment is 1
+// -If it's linear scale, then leave the limits unset, so that the script will supply default
+//  values based on the data itself.
+If(groundruleskey=="Keithley",
+	For Each Row(
+		:Axis_Scale=If(
+			Matches Pattern(:Parameter,"(_ICEO|_ICBO|_IEBO|_IL|_IEO|_IBO|_ICO)"),
+			"Log",
+			"Linear"
+		);
+		:Value_Invert=Or(
+			Matches Pattern(:Parameter,"^P.*(ICEO|ICBO|IEBO|IL|IEO)"),
+			Matches Pattern(:Parameter,"^SHT.*LEAK")
+			);
+			
+		:Axis_Low=If(
+			Matches Pattern(:Parameter,"(_ICEO|_ICBO|_IEBO|_IL|_IEO|_IBO|_ICO)"),
+			1e-12
+		);
+		:Axis_High=If(
+			Matches Pattern(:Parameter,"(_ICEO|_ICBO|_IEBO|_IL|_IEO|_IBO|_ICO)"),
+			1e-3
+		);
+		:Axis_Inc=If(
+			Matches Pattern(:Parameter,"(_ICEO|_ICBO|_IEBO|_IL|_IEO|_IBO|_ICO)"),
+			1
+		);
+	);
+);

@@ -1,38 +1,56 @@
+// Use the local namespace
 Names Default To Here(1);
+
+// Generates a horizontal data table from which the variability report can be generated.
+//
+// dataname- the same dataname that was fead to downloadMeasData in order to fetch this
+//   dataset, so the function knows which files to open
+// whichparams- a list of parameters to include in the table.  If this list is empty,
+//   (the usual case), a pop-up will ask the user for which parameters to use.
+// wafermap- a string naming the wafermap so the script can do edge vs center coloring.
+//   See mapCenterEdge.jsl for the values.
+//
+// Returns:
+//   the table
+//   the list of params
+//   the boolean isspecial
+//   the limits table
+
 generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
-	// Generate table for specific parameters
+
+	// Open the data and limits
 	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
 	fulltab=Open("saved_data/"||dataname||".jmp",Private);
-	:WAFER << Set Modeling Type(Nominal);
 	
+	// Pop-up to determine which parameters to use and whether it's a special analysis
+	// default: not special
 	specialanalysis=0;
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
-		//all params=Associative Array(:PARAMETER << Get Values)<<Get Keys;
 		all params=column(dtLimits,"Parameter")<<Get Values;
-		//all params={ "1", "2", "3"};
 		Write("Done listing parameters.\!N");
 		New Window(<<Modal,
 			VListBox(
 			whichparambox=ListBox(all params)
 			,specialanalysisbox=CheckBox("Special Analysis"))
-				
 			);
 		whichparams=whichparambox<<Get Selected;
 		specialanalysis=specialanalysisbox<<Get();
 	);
 	
+	// If user made no selection, then stop!
 	if(not(N Items(whichparams)),
 		Write("No variables selected.");
 		Stop();
 	);
 	
+	// Make a table with only the intended parameter
 	Write("Generating horizontal data for specific parameters...\!N");
 	fulltab<<select where(contains(whichparams,:parameter));
 	ptab=fulltab<<subset(selected,Private);
 	Close(fulltab,No Save);
 
-	// Make table horizontal
+	// "Split" by parameter so the parameter values become columns.
 	phtab=ptab<<
 		Split(
 			Split By( :PARAMETER ),
@@ -47,7 +65,6 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 	Write("Adding Spec Limits\!N");
 	include("populateSpecs.jsl");
 	populateSpecs(phtab,dtLimits);
-	//Close(dtLimits,No Save);
 
 	// Add in WAT key data
 	Write("Adding WAT Key data\!N");
@@ -59,20 +76,16 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 		Name( "Include non-matches" )(0, 0),
 		Preserve main table order( 1 ),
 		Output Table( "HORIZONTAL" ),
-		//Invisible
-		//Private
 	);
 	Close(dtWAT, No Save);
 	Close(phtab, No Save);
 	
-	Write("Cleaning column names\!N");
-	
+	// Open the splits file if it exists
 	splits file="splits\splits.xlsx";
 	if(file exists(splits file),
 		Write("Found splits file.\!N");
 		splittab=Open(
 			splits file,
-			//Worksheets( "Split Tables" ),
 			Open all sheets(1),
 			Use for all sheets( 1 ),
 			Concatenate Worksheets( 0 ),
@@ -94,6 +107,7 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 			Private
 		);
 
+		// Check and list column names
 		splittab columns=splittab<<Get Column Names;
 		pos full lot=contains(splittab columns,As Name("Full Lot"));
 		pos wafer=contains(splittab columns,As Name("Wafer"));
@@ -103,18 +117,20 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 		if( not(pos full lot) | not(pos wafer),
 			Write("Splits table incorrectly formatted!\!N");,
 			
+			// Expression to select all the columns in the horizontal table
 			select expr = expr( select());
 			for(i=1, i<=nitems(hor columns), i+=1,
 				insert into(select expr, column(htab,hor columns[i]));
 			);
 			
+			// Expression to select all but the first column in the splits table
 			remove from (splittab columns, 1, pos wafer);
 			select with expr = expr(select with());
 			for(i=1, i<=nitems(splittab columns), i+=1,
 				insert into(select with expr, column(splittab,splittab columns[i]));
 			);
-			//Show(select with expr);
 			
+			// And use those to join the tables
 			select with expr expr=expr(name expr(select with expr));
 			select expr expr=expr(name expr(select expr));
 			joinexpr=eval expr(
@@ -129,48 +145,55 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 					Output Table Name("Joined Horizontal"),
 					Invisible
 			));
-			//Show(joinexpr);
 			eval(joinexpr);
 			close(htab, No Save);
 			htab=newhtab;
 		);
-		
 		,
 		Write("Didn't find splits file.  Proceeding without.\!N");
 	);
 	
 	
+	// Create a character column by concatenating the coordinates
 	htab << Begin Data Update;
 	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
+	// Get the center-edge wafer map
 	include("mapCenterEdge.jsl");
 	ce map=::CE Maps[wafermap] ;
+	// Turn the map into a formula for a new column
 	ce formula=eval expr(if(expr(ce map)[:Coord_CAT],"Edge","Center"));
 	eval( eval expr(
 		htab<< New Column("ColorMap", Character, Nominal, Formula(name expr(ce formula)))));
+	// Use that new column to color the rows
 	(htab << Select Where( :ColorMap == "Center"))<<Colors("Red");
 	(htab << Select Where( :ColorMap == "Edge"))<<Colors("Blue");
-	//htab << Color By Column("ColorMap");
 	htab << End Data Update;
 	
 	
+	// Create the relevant columns for the failure chart
 	Write("Creating Failure columns...\!N");
 	htab << Begin Data Update;
-	// Create the failbool columns
+	// For each parameter
 	For( p=1, p<=N Items(whichparams), p+=1,
+		// The names for the columns
 		colname=whichparams[p];
 		failbool_colname=colname||"_FAILBOOL";
 		failpct_colname=colname||"_FAILPCT";
 		
+		// Boolean formula: 1 if failure
 		formulabool= eval expr(
 			(( ascolumn(expr(colname)) < (ascolumn(expr(colname))<<Get Property("Spec Limits"))["LSL"])
 			|
 			( ascolumn(expr(colname)) > (ascolumn(expr(colname))<<Get Property("Spec Limits"))["USL"])) 	
 			);
-			
+		
+		// Failure proportion formula calculated by averaging the boolean column over rows that
+		// have the same wafer, lot_id, and pcm_spec
 		formulapct= eval expr(
 			col mean(ascolumn(expr(failbool_colname)),:WAFER, :LOT_ID, :PCM_SPEC)
 		);
-		//show(formula);
+		
+		// Actually create the columns
 		htab << New Column(
 			failbool_colname,
 			Formula(nameexpr(formulabool))
@@ -181,10 +204,12 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 		);
 	);
 	
-	
+	// Create a NUMERIC TheDate column by parsing the preexisting character Date column
+	// So that the lots can be ordered by this numeric value on the x-axis
 	htab << New Column("the date", Numeric, Continuous, Format("Best", 12),
 		Formula(Parse Date(:DATE, "YYYY-MM-DD")));
 	
+	// Run those formulas now
 	htab << RunFormulas();
 	htab << End Data Update;
 	

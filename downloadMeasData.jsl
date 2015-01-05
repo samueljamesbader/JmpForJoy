@@ -1,13 +1,32 @@
+// Use local namespace
 Names Default To Here(1);
 
-downloadWATData=Function( {dataname, getlimits},{Default Local},
+// Directory on the website to extract data from
+datdir="http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/";
 
+// Downloads the measurement from the website and saves it inside the saved_data folder.
+//
+// dataname - indicates the name of the data file to get.  ie if dataname is SAM, then
+//   the data should be in 
+//     http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/SAM.txt.zip
+//   and the limits should be in
+//     http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/SAM.LIMITS.txt
+//   and the WAT key table is
+//     http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/DEVELOPMENT_WAT_KEY_TABLE.txt
+// getlimits - boolean indicating whether to actually download the limits file.
+//
+// The results will be saved as saved_data/SAM.jmp, saved_data/SAM.LIMITS.jmp,
+// and saved_data/WAT_Key.jmp.
+//
+// Adds columns to the limits file for AXIS_LOW, AXIS_HIGH, AXIS_INC, AXIS_SCALE, and
+// VALUE_INVERT, then applies daveGroundRules.jsl to the limits before saving.
+downloadMeasData=Function( {dataname, getlimits, ground rules key},{Default Local},
+
+	// Create saved_data if it doesn't already exist
 	if (not(directory exists("saved_data")),
 		create directory("saved_data"););
 
-	datdir="http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/";
-
-	// Get the zip data from the website
+	// Get the zip data from the website, import it, and save it.
 	Write("Getting main data...\!N");
 	zipdt = open(datdir||dataname||".txt.zip",Zip);
 	zip_member_list = zipdt << dir;
@@ -18,7 +37,7 @@ downloadWATData=Function( {dataname, getlimits},{Default Local},
 			Column( "WAT_FILE_KEY", Numeric, Continuous, Format( "Best", 10 ) ),
 			Column( "PARAMETER", Character, Nominal ),
 			Column( "UNITS", Character, Nominal ),
-			Column( "WAFER", Numeric, Continuous, Format( "Best", 10 ) ),
+			Column( "WAFER", Nominal, Format( "Best", 10 ) ),
 			Column( "SITE", Numeric, Continuous, Format( "Best", 10 ) ),
 			Column( "XCOORD", Numeric, Continuous, Format( "Best", 10 ) ),
 			Column( "YCOORD", Numeric, Continuous, Format( "Best", 10 ) ),
@@ -47,7 +66,8 @@ downloadWATData=Function( {dataname, getlimits},{Default Local},
 	);
 	close(dtRaw,Save("saved_data/"||dataname||".jmp"));
 	
-	// Load the limit data
+	// Load the limit data from the website, sort it by parameter, add necessary spec columns,
+	// apply Dave's rules, and save it.
 	If( getlimits,
 		Write("Getting limit data...\!N");
 		dtLimits=Open(
@@ -83,13 +103,13 @@ downloadWATData=Function( {dataname, getlimits},{Default Local},
 		dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
 		dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
 		dtLimits << New Column( "VALUE_INVERT", Numeric, Continuous, Format("Best",10));
-		groundrules=include("prepwork/daveGroundRules.jsl",<<ParseOnly);
+		groundrules=include("daveGroundRules.jsl",<<ParseOnly);
 		eval(groundrules);
 		Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
 	);
 	
 	
-	// Open the WAT Key table
+	// Load the WAT Key table and save it.
 	Write("Getting WAT key data...\!N");
 	keyname="DEVELOPMENT_WAT_KEY_TABLE.txt";
 	Open(

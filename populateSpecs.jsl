@@ -6,16 +6,15 @@
 // Given a column reference, returns the spec limits in a vector, [lower, upper, target]:
 // If a limit is not defined it is returned as .
 // ******************************************************************************************
-getSpecs = Function( {col},
-	{Default Local},
-		// Note that the number of arguments in slp below can change! It can be 0 (if the
+getSpecs = Function( {col}, {Default Local},
+	// Note that the number of arguments in slp below can change! It can be 0 (if the
 	// property is not even defined) or 1, 2 or 3
 	slp = col << GetProperty( "Spec Limits" );
-		// Assume that nothing is defined . . .
+	// Assume that nothing is defined . . .
 	l = .;
 	u = .;
 	t = .;
-		// Find out what is defined . . .
+	// Find out what is defined . . .
 	For( i = 1, i <= N Arg( slp ), i++,
 		thisExpr = Arg( slp, i );
 		sType = Char( Head( thisExpr ) );
@@ -31,8 +30,7 @@ getSpecs = Function( {col},
 // ******************************************************************************************
 // Given a table, make a new table containing the spec limits from the column properties
 // ******************************************************************************************
-extractSpecs = Function( {dt},
-	{Default Local},
+extractSpecs = Function( {dt}, {Default Local},
 	// Make the new table
 	cols = dt << GetColumnNames( "String" );
 	dt2 = New Table( "Spec Limits from " || (dt << GetName),
@@ -103,12 +101,10 @@ populateSpecs = Function( {dt, dt1},
 			
 			If (Column(dt1,"VALUE_INVERT")[r],
 				Column(dt,name)<< Set Values(-1*(Column(dt,name)<<Get Values));
-				//Column(dt,name)<< Set Property("Inverted",1);
 				lsl = -Column( dt1, "SPEC_HIGH" )[r];
 				usl = -Column( dt1, "SPEC_LOW" )[r];
 				tar = "";
 				,
-				//Column(dt,name)<< Set Property("Inverted",0);
 				lsl = Column( dt1, "SPEC_LOW" )[r];
 				usl = Column( dt1, "SPEC_HIGH" )[r];
 				tar="";
@@ -125,7 +121,6 @@ populateSpecs = Function( {dt, dt1},
 	);
 );
 
-//include("cleanName.jsl");
 specsToTable=Function({dt,dtLim,param},{Default Local},
 
 	Print("about to update limits table.");
@@ -134,7 +129,6 @@ specsToTable=Function({dt,dtLim,param},{Default Local},
 	ax=column(dt,param)<<Get Property("axis");
 	For(r=1, r<=N Rows(dtLim), r++,
 		name=Column(dtLim,"PARAMETER")[r];
-		//print(cleanName(dirtyName));
 		if (name==param,
 			Print("Updating Limits Table");
 			inv=Column(dtLim,"VALUE_INVERT")[r];

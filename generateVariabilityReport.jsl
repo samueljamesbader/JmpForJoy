@@ -1,15 +1,19 @@
-//Write("PDICTs IS GLOBAL!!!\!N");
+// Creates the graphical window showing the variability report
+// htab- the table to work from
+// params- list of parameter names
+// isspecial- whether the analysis is varied or just normal x-y
+// dtLimits- the limits table
 
-
-							
 generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Local},
 
+	// Use the next empty slot in pdicts
 	rno=N Items(::pdicts)+1;
-	//Show(rno);
 	::pdicts[rno]=Associative Array();
 	::pdicts[rno]["htab"]=htab;
 	
+	// If special analysis, then open a column dialog for the user to vary the analysis
 	If(isspecial,
+		// Give the usual variables as default
 		cd = Column Dialog(
 			xvars = ColList("X Variables",Columns(:WAFER)),
 			xgroupers =  ColList("X Grouping",Columns(:PCM_SPEC, :LOT_ID)),
@@ -17,109 +21,88 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		xvars=cd["xvars"];
 		xgroupers=cd["xgroupers"];
 		,
+		// If not special, just use those defaults
 		xvars= List(:WAFER);
 		xgroupers= List(:PCM_SPEC, :LOT_ID);
 	);
-	if(n items(xvars),
-		primary xvar=xvars[1]<<get name;,
-		primary xvar="";);
-	//Show(primary xvar);
-	win=New Window("Variability",
-		vb=V List Box());
+	// Create the window
+	win=New Window("Variability", vb=V List Box());
 
+	// Just setting a default used in graphical limit adjustment code
 	::up=0;
-	::dog=9;
-	::abc=1;
+	
+	// For each parameter
 	For( p=1, p<=N Items(params), p+=1,	
+	
+		// Names
 		colname=params[p];
-		fail_colname=Concat(colname,"_FAILPCT");	
+		fail_colname=Concat(colname,"_FAILPCT");
+		
+		//Create an entry in pdicts for this parameter
 		::pdicts[rno][colname]=Associative Array();
 		
-		
+		// Store spec limits in pdicts
 		::pdicts[rno][colname]["LSL"]=(column(htab,colname) << get property("spec limits"))["LSL"];
 		::pdicts[rno][colname]["USL"]=(column(htab,colname) << get property("spec limits"))["USL"];
 		
+		// Create an expression for the graphical limit adjustment code
+		// I can't explain the black magic that makes this section work most of the time.
+		// Might revisit, but I've tried so many things already... there's definitely some sort of
+		// race condition in JMP...
 		::pdicts[rno][colname]["script"]=eval expr(
 			Handle( .5, ::pdicts[expr(rno)][expr(colname)]["LSL"],
-			
-				//print("::up");
-				//print(::up);
 				if(::up,print("doing nothing");::up=0;Stop();,
-					print("doing something");
-					print("staring lsl handle script");
-					print(expr(colname));
 					::pdicts[expr(rno)][expr(colname)]["lslbox"]<<set(y);
-					print("hey");
-					print(expr(colname),expr(rno));
 					lslboxChanged(expr(colname),expr(rno));
 				);,
-				
 				::up=1;
-				//print("respecing");
 				reSpec(expr(colname),expr(rno));
-				//updateCPKrow(expr(colname),expr(rno));
-				//print("done respecing");
 				::up=0;
 			);
 			Handle( .5,::pdicts[expr(rno)][expr(colname)]["USL"],
-			
-				print("::up");
-				print(::up);
 				if(::up,print("doing nothing");::up=0;Stop();,
-					print("doing something");
-					print("staring usl handle script");
-					print(expr(colname));
 					::pdicts[expr(rno)][expr(colname)]["uslbox"]<<set(y);
-					print("hey");
-					print(expr(colname));
 					uslboxChanged(expr(colname),expr(rno));
 				);,
-				
-				//::up=1;
-				//print("respecing");
-				//::dog=6;
+				::up=1;
 				reSpec(expr(colname),expr(rno));
-				//updateCPKrow(expr(colname),expr(rno));
-				//print("done respecing");
-				//::dog=7;
-				//::up=0;
+				::up=0;
 			);
-			//Text(Center Justified,{5,5},Char(::pdicts[expr(rno)][expr(colname)]["USL"]));
-			//Text(Center Justified,{5,5},Print("WHAT"););
 		);
 		
-		xvarexpr=expr(Variables());
+		// Format the (possible varied) x and y variables into the form that graph builder needs them
+		varexpr=expr(Variables());
 		for(i=1, i<=n items(xvars),i+=1,
-			insertinto(xvarexpr,
+			insertinto(varexpr,
 				eval expr( X(expr(xvars[i]),Position(1)))
 			)
 		);
-		insertinto(xvarexpr,
+		insertinto(varexpr,
 			eval expr(Y(column(htab,expr(fail_colname))))
 		);
-		insertinto(xvarexpr,
+		insertinto(varexpr,
 			eval expr(Y(column(htab,expr(colname))))
 		);
+		// Noting that LOT_ID and PCM_SPEC should be chronologically ordered
 		for(i=1, i<=n items(xgroupers), i+=1,
 			if( Or((xgroupers[i]<<Get Name)=="LOT_ID",(xgroupers[i]<<Get Name)=="PCM_SPEC"),
-				insertinto(xvarexpr,
+				insertinto(varexpr,
 					eval expr(Group X(expr(xgroupers[i]),
 						Order By( :TheDate, Ascending, Order Statistic( "Mean" ) ),
 						Show Title( 0 ) ))),
-				insertinto(xvarexpr,
+				insertinto(varexpr,
 					eval expr(Group X(expr(xgroupers[i])))))
 		);
-		//Show(xvarexpr);
-		xvarexprexpr=expr(nameexpr(xvarexpr));
+		varexprexpr=expr(nameexpr(varexpr));
 		
-		
+		// Create an expression to actually build the graph
 		vargraph=eval expr(
 			Graph Builder(
 				Size( 850, 590 ),
 				Show Control Panel( 0 ),
 				Show Legend( 0 ),
 				X Group Edge( "Bottom" ),
-				expr(xvarexprexpr),
+				expr(varexprexpr),
 				Relative Sizes( "Y", [1 3] ),
 				Elements(
 					Position( 1, 1 ),
@@ -154,12 +137,6 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 						ScaleBox,
 						{Format( "Percent", 10, 0 )}
 					),
-					//Dispatch(
-					//	{},
-					//	expr(primary xvar),
-					//	ScaleBox,
-					//	{Show Major Grid( 1 )}
-					//),
 					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
 					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
 					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
@@ -167,10 +144,10 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 			)
 		);
 
-		//show(vargraph);
-
+		// Build the graph and store a reference to it in pdicts
 		eval(eval expr(vb<<append(::pdicts[rno][colname]["graph"]=expr(name expr(vargraph)))));
 		
+		// Add in the three buttons
 		(::pdicts[rno][colname]["graph"]<<report())<<append(guibox=HListBox());
 		eval(evalexpr(guibox<<append(slob=OutlineBox("Spec Limits",
 			{"Recalc CPK",UpdateCPKrow(expr(colname),expr(rno))},
@@ -189,12 +166,12 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 			specsToTable(htab,expr(dtLimits),expr(colname));
 		))));
 		
+		// Add in the Spec limit fields
 		slob<<append(limshb=H List Box());
 		(::pdicts[rno][colname]["graph"]<<report())<<set title(colname);
 		(::pdicts[rno][colname]["graph"]<<report())<<set auto stretching(0,0);
 		
 		limshb<<append(TextBox("<b> LSL:  </b>",<<Markup(1)));
-		
 		eval(eval expr(limshb<<append(
 			::pdicts[rno][expr(colname)]["lslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["LSL"],10,
 				<<Set Function(Function({},{},
@@ -203,8 +180,6 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 					Show("After box changed.");
 					))))));
 		limshb<<append(TextBox("<b>  USL:  </b>",<<Markup(1)));
-		
-		
 		eval(eval expr(limshb<<append(
 			::pdicts[expr(rno)][expr(colname)]["uslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["USL"],10,
 				<<Set Function(Function({},{},
@@ -212,6 +187,7 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 					reSpec(expr(colname),expr(rno));
 					))))));
 		
+		// Add in the CPK fields
 		slob<<append(cpkhb=H List Box());
 		cpkhb<<append(TextBox("<b> Mean:  </b>",<<Markup(1)));
 		eval(eval expr(cpkhb<<append(
@@ -227,6 +203,7 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 				TextBox("Hit Calc";))));
 		slob<<append(medhb=HListBox());
 		
+		// Get the median from an invisible stats table
 		eval(eval expr(
 		t=htab<<Tabulate(
 			Show Control Panel( 0 ),
@@ -240,42 +217,36 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		t<<Close Window();
 		Close("Stats",NoSave);
 		medhb<<append(TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)));
-		//slob<<append(extrahb=HListBox());
+		
+		// Add the hold scales button
 		eval(eval expr(buthb<<append(ButtonBox("Hold Scales",setAxis(expr(colname),expr(rno))))));
-		//eval(eval expr(cpkhb<<append(
-		//	specialFilter(expr(colname),expr(rno)))));
 		
-		
+		// Add a Data Filter and put a RECALC CPK button inside it.
 		eval(eval expr(guibox<<append(
 			datfilt=htab<<DataFilter(Filter Columns(expr(colname)),Set Select(0),Set Show(1),Set Include(1)))));
 		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal) <<Close;
 		eval(eval expr(guibox[ButtonBox(8)]
 			<<Sib Append(ButtonBox("RECALC CPK",updateCPKrow(expr(colname),expr(rno));))));
-		//eval(eval expr(limshb<<append(ButtonBox("::update specs",ReSpec(expr(colname))))));
 		
+		// Do the CPK Calculations
 		updateCPKRow(colname,rno);
 	);
 
 );
 
-
+// Update the limit in pdicts from the value in the box
 lslboxChanged=Function({colname,rno},{Default Local},
-	//eval expr(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<remove ref line(expr(::pdicts[rno][colname]["LSL"])));
-	//eval expr(((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<remove ref line(expr(::pdicts[rno][colname]["USL"])));
-	
 	newlsl=::pdicts[rno][colname]["lslbox"] <<get();
 	::pdicts[rno][colname]["LSL"]=newlsl;
 );
-
 uslboxChanged=Function({colname,rno},{Default Local},
 	newusl=::pdicts[rno][colname]["uslbox"] <<get();
 	::pdicts[rno][colname]["USL"]=newusl;
 );
 
-
+// Update the spec limits in the table properties
 reSpec=Function({colname,rno},{Default Local},
 	
-	print("begin respec");
 	setAxis(colname,rno);
 	newprops= eval expr({
 			LSL(expr(::pdicts[rno][colname]["LSL"])),
@@ -284,20 +255,17 @@ reSpec=Function({colname,rno},{Default Local},
 			Show Limits(1),
 			Add Ref Line(expr(::pdicts[rno][colname]["LSL"]),0,5,"LSL");
 			Add Ref Line(expr(::pdicts[rno][colname]["USL"]),0,5,"USL");
-			Print("I'm an axis property!!");
 	});
 	htab=::pdicts[rno]["htab"];
 	column(htab,colname)<<Delete Property("Spec Limits");
 	eval(eval expr(column(htab,colname)<<Set Property("Spec Limits",expr(newprops))));
 	column(htab,concat(colname,"_FAILBOOL")) <<EvalFormula();
 	column(htab,concat(colname,"_FAILPCT")) <<EvalFormula();
-	//htab << RunFormulas();
-	//htab << Rerun Formulas;
 	
-	print("end respec");
 	updateCPKrow(colname,rno);
 );
 
+// Update the axis limits in the table properties so the graphics doesn't revert them
 setAxis=Function({colname,rno},{Default Local},
 	((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Save To Column Property;
 	
@@ -314,6 +282,7 @@ setAxis=Function({colname,rno},{Default Local},
 	
 );
 
+// Runs the CPK Calculation
 updateCPKrow=Function({colname,rno},{Default Local},
 	Write("Updating CPK\!N");
 	col=column(::pdicts[rno]["htab"],colname);

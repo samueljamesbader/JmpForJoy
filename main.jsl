@@ -1,38 +1,44 @@
+// Use the local namespace
 Names Default To Here(1);
 
 
+//////////////////////////////////////////
+/// HERE'S THE STUFF YOU MIGHT TWEAK:
+//////////////////////////////////////////
+
+///////
+///  Specify how you want to do the analysis
+///////
+// If you know which paramters you want to inspect, you can list them here rather
+// than use the pop-up
 whichparams={};
-do download=0;
-get limits=0;
+// 1 iff you want to (re)-download the data
+do download=1;
+// 1 iff you want to (re)-download the limits (CAUTION: you probably don't want to
+// overwrite your limits files, so this is usually 0.)
+get limits=1;
 
-// OLD Keithley
-//dataname="018A3P6M3318XF4C_falcon_pc11_dual_a1.in_D65946";
-//whichparams={"N.35x5.2_CBO@1UA","N.35x5.2_CES@1UA","N.35x5.2_EBO@1UA"};
-
-// Bipolar WAT M3
-dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";
-whichparams={"AN041_IB_0.5_2"};
-//whichparams={"AN041_IB_0.5_2","NHSX50_IC_0.8V"};
-
-// MOS WAT
-//dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";
-//whichparams={"BV_N4_V 10/.18"};
-
-// Keithley
-//dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";
+//////
+///  Specify which dataset to analyze by uncommenting (only) the appropriate line
+//////
+// To look at Bipolar WAT M3:
+//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+// To look at MOS WAT:
+//dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
+// To look at Keithley:
+dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
 
-
-
-
-
+//////////////////////////////////////////
+/// DON'T MESS WITH THE STUFF BELOW HERE.
+//////////////////////////////////////////
 Close All(Data Tables);
 Close All(Reports);
 
 // Download if necessary
 if (do download,
-	include("downloadWATData.jsl");
-	downloadWATData(dataname, get limits);
+	include("downloadMeasData.jsl");
+	downloadMeasData(dataname, get limits, ground rules);
 );
 
 // Generate horizontal table
