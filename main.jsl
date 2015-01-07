@@ -12,11 +12,15 @@ Names Default To Here(1);
 // If you know which paramters you want to inspect, you can list them here rather
 // than use the pop-up
 whichparams={};
+// If you are prespecifying whichparams, you can still use "Special Analysis" by
+// setting this to 1
+defaulttospecial=0;
 // 1 iff you want to (re)-download the data
-do download=1;
+do download=0;
 // 1 iff you want to (re)-download the limits (CAUTION: you probably don't want to
 // overwrite your limits files, so this is usually 0.)
-get limits=1;
+get limits=0;
+
 
 //////
 ///  Specify which dataset to analyze by uncommenting (only) the appropriate line
@@ -26,8 +30,9 @@ get limits=1;
 // To look at MOS WAT:
 //dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at Keithley:
-dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
+//dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
+dataname="018A3P6M3318XF4C_eagle_pc17_map.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
 //////////////////////////////////////////
 /// DON'T MESS WITH THE STUFF BELOW HERE.
@@ -44,7 +49,8 @@ if (do download,
 // Generate horizontal table
 include("generateSpecificTable.jsl");
 Show(whichparams);	
-{htab,params,isspecial,dtLimits}=generateSpecificTable(dataname,whichparams,wafermap);
+{htab,params,isspecial,dtLimits}=
+	generateSpecificTable(dataname,whichparams,defaulttospecial,wafermap);
 
 // Generate the actual report
 ::pdicts={};

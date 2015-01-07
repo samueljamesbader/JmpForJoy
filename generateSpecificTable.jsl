@@ -16,7 +16,7 @@ Names Default To Here(1);
 //   the boolean isspecial
 //   the limits table
 
-generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
+generateSpecificTable=Function({dataname,whichparams,defaulttospecial,wafermap},{Default Local},
 
 	// Open the data and limits
 	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
@@ -24,7 +24,7 @@ generateSpecificTable=Function({dataname,whichparams,wafermap},{Default Local},
 	
 	// Pop-up to determine which parameters to use and whether it's a special analysis
 	// default: not special
-	specialanalysis=0;
+	specialanalysis=defaulttospecial;
 	if(not(N Items(whichparams)),
 		Write("Listing Parameters...\!N");
 		all params=column(dtLimits,"Parameter")<<Get Values;
