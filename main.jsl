@@ -5,6 +5,10 @@ Names Default To Here(1);
 //////////////////////////////////////////
 /// HERE'S THE STUFF YOU MIGHT TWEAK:
 //////////////////////////////////////////
+///////
+///  Specify where this script is installed
+///////
+scriptdir="C:\Users\sbader\Desktop\JMP_Project\localize\JmpForJoy\";
 
 ///////
 ///  Specify how you want to do the analysis
@@ -26,13 +30,13 @@ get limits=0;
 ///  Specify which dataset to analyze by uncommenting (only) the appropriate line
 //////
 // To look at Bipolar WAT M3:
-//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at MOS WAT:
 //dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at Keithley:
 //dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
-dataname="018A3P6M3318XF4C_eagle_pc17_map.in";wafermap="pc17_Keithley";groundrules="Keithley";
+//dataname="018A3P6M3318XF4C_eagle_pc17_map.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
 //////////////////////////////////////////
 /// DON'T MESS WITH THE STUFF BELOW HERE.
@@ -50,7 +54,7 @@ if (do download,
 include("generateSpecificTable.jsl");
 Show(whichparams);	
 {htab,params,isspecial,dtLimits}=
-	generateSpecificTable(dataname,whichparams,defaulttospecial,wafermap);
+	generateSpecificTable(dataname,whichparams,defaulttospecial,wafermap,scriptdir);
 
 // Generate the actual report
 ::pdicts={};

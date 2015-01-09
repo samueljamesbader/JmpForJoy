@@ -16,7 +16,7 @@ Names Default To Here(1);
 //   the boolean isspecial
 //   the limits table
 
-generateSpecificTable=Function({dataname,whichparams,defaulttospecial,wafermap},{Default Local},
+generateSpecificTable=Function({dataname,whichparams,defaulttospecial,wafermap,scriptdir},{Default Local},
 
 	// Open the data and limits
 	dtLimits=Open("saved_data/"||dataname||".LIMITS.jmp",Private);
@@ -156,7 +156,20 @@ generateSpecificTable=Function({dataname,whichparams,defaulttospecial,wafermap},
 	
 	// Create a character column by concatenating the coordinates
 	htab << Begin Data Update;
-	htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)));
+	eval(eval expr(htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)),
+		Set Property(
+			"Map Role",
+			Map Role(
+				Shape Name Use(
+					expr(scriptdir || "wafermaps\" || wafermap || "-Name.jmp"),
+					"COORDS"
+				)
+			)
+		)
+	)));
+	
+	
+	
 	// Get the center-edge wafer map
 	include("mapCenterEdge.jsl");
 	ce map=::CE Maps[wafermap] ;
