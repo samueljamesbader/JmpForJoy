@@ -135,7 +135,8 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 						{},
 						expr(fail_colname),
 						ScaleBox,
-						{Format( "Percent", 10, 0 )}
+						{Format( "Percent", 10, 0 ), Min( 0 ), Max( 1 ), Inc( 0.1 ),			// Failure range for Jo-ey
+						Minor Ticks( 1 ), Show Major Grid( 1 ), Show Minor Ticks( 0 ), Inside Ticks( 1 )}
 					),
 					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
 					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
