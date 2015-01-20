@@ -98,7 +98,7 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		// Create an expression to actually build the graph
 		vargraph=eval expr(
 			Graph Builder(
-				Size( 850, 590 ),
+				Size( 850, 590 ),					// CHANGE GRAPH SIZE HERE
 				Show Control Panel( 0 ),
 				Show Legend( 0 ),
 				X Group Edge( "Bottom" ),

@@ -1,0 +1,77 @@
+// What dataset to work on
+dataname="018A3P6M3318XF4C_eagle_pc17_map";
+
+// Close anything already open
+Close All(Data tables);
+
+//Open the data
+dtraw=Open("../saved_data/"||dataname||".in.jmp",Invisible);
+
+// Make a table of IC's, separate out a column of other measurement details from :PARAMETER
+dtraw<<Select Where(Contains(:PARAMETER,"_IC@"));
+ictable=dtraw<<Subset(Selected Rows(1),Selected Columns(0),Invisible);
+ictable<<New Column("measdeets",Character,<<Formula(Substitute(:PARAMETER,"_IC@","_BETA@")));
+:VALUE<< Set Name("IC Value");
+
+// Make a table of IB's, separate out a column of other measurement details from :PARAMETER
+dtraw<<Select Where(Contains(:PARAMETER,"_IB@"));
+ibtable=dtraw<<Subset(Selected Rows(1),Selected Columns(0),Invisible);
+ibtable<<New Column("measdeets",Character,<<Formula(Substitute(:PARAMETER,"_IB@","_BETA@")));
+:VALUE<< Set Name("IB Value");
+
+// Join the IC and IB table
+joined=ictable<< Join(
+			With( ibtable ),
+			Merge Same Name Columns,
+			By Matching Columns(
+				:WAT_FILE_KEY = :WAT_FILE_KEY,
+				:WAFER = :WAFER,
+				:SITE = :SITE,
+				:XCOORD = :XCOORD,
+				:YCOORD = :YCOORD,
+				:measdeets = :measdeets
+			),
+			Drop multiples( 0, 0 ),
+			Name( "Include non-matches" )(0, 0),
+			Preserve main table order( 1 ),
+			Output Table( "joined" ),
+			Invisible
+);
+
+// Create the beta column
+joined << New Column("VALUE",<<Formula(If(Or(:ICvalue==1e10,:IBvalue==1e10),1e10,:ICvalue/:IBvalue)));
+:VALUE << Delete Formula;
+
+// Preprocess the joined table a bit, and concatenate onto the main table
+joined << Delete Column(Match Flag);
+joined << Delete Column(IBvalue);
+joined << Delete Column(ICvalue);
+:MEASDEETS << Delete Formula;
+joined << Delete Column(Parameter);
+joined << Delete Column(Units);
+:MEASDEETS << Set Name("PARAMETER");
+data with beta=dtraw<<Concatenate( joined, Output Table( "Data With Beta" ) );
+
+data with beta<<Save("../saved_data/"||dataname||"_with_beta.in.jmp");
+
+
+
+// List of beta parameter names (removing duplicate names)
+unique betas=Associative Array(Column(joined,"PARAMETER") << Get Values()) << Get Keys();
+
+// Make a limits table for the beta parameters
+beta limits=New Table("Beta limits",
+	<<New Column("PARAMETER",Character,<<Set Values(unique betas)),
+	<<New Column("SPEC_LOW",Numeric,<<Set Each Value(0)),
+	<<New Column("SPEC_HIGH",Numeric,<<Set Each Value(0)),
+	<<New Column("VALID_LOW",Numeric,<<Set Each Value(0)),
+	<<New Column("VALID_HIGH",Numeric,<<Set Each Value(0)),
+	<<New Column("AXIS_SCALE",Character,<<Set Each Value("Linear")),
+	<<New Column("VALUE_INVERT",Numeric,<<Set Each Value(0)),
+	Invisible
+	);
+	
+// Open the limits data and merge this on
+limraw=Open("../saved_data/"||dataname||".in.LIMITS.jmp", Invisible);
+lim with beta=limraw<<Concatenate(beta limits, Output Table( "Limits With Beta"));
+lim with beta<<Save("../saved_data/"||dataname||"_with_beta.in.LIMITS.jmp");
