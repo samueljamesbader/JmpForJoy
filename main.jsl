@@ -1,6 +1,7 @@
 // Use the local namespace
 Names Default To Here(1);
-
+//Store globals for each run in pdicts
+::pdicts={};
 
 //////////////////////////////////////////
 /// HERE'S THE STUFF YOU MIGHT TWEAK:
@@ -15,10 +16,12 @@ scriptdir="C:\Users\sbader\Desktop\JMP_Project\localize\JmpForJoy\";
 ///////
 // If you know which paramters you want to inspect, you can list them here rather
 // than use the pop-up
-whichparams={};
+whichparams={"N.18X5_BF@.6V"};
 // If you are prespecifying whichparams, you can still use "Special Analysis" by
 // setting this to 1
 defaulttospecial=0;
+defaulttoCE=0;
+defaulttosliders=0;
 // 1 iff you want to (re)-download the data
 do download=0;
 // 1 iff you want to (re)-download the limits (CAUTION: you probably don't want to
@@ -30,13 +33,14 @@ get limits=0;
 ///  Specify which dataset to analyze by uncommenting (only) the appropriate line
 //////
 // To look at Bipolar WAT M3:
-dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at MOS WAT:
 //dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at Keithley:
 //dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
-
+// To look at Eagle pc17
 //dataname="018A3P6M3318XF4C_eagle_pc17_map.in";wafermap="pc17_Keithley";groundrules="Keithley";
+// To look at Eagle pc17 with beta
 dataname="018A3P6M3318XF4C_eagle_pc17_map_with_beta.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
 //////////////////////////////////////////
@@ -44,6 +48,16 @@ dataname="018A3P6M3318XF4C_eagle_pc17_map_with_beta.in";wafermap="pc17_Keithley"
 //////////////////////////////////////////
 Close All(Data Tables);
 Close All(Reports);
+
+// Make a pdicts entry for this run
+run=N Items(::pdicts)+1;
+::pdicts[run]=Associative Array();
+::pdicts[run]["whichparams"]=whichparams;
+::pdicts[run]["dataname"]=dataname;
+::pdicts[run]["wafermap"]=wafermap;
+::pdicts[run]["specialanalysis"]=defaulttospecial;
+::pdicts[run]["centeredge"]=defaulttoCE;
+::pdicts[run]["defaulttosliders"]=defaulttosliders;
 
 // Download if necessary
 if (do download,
@@ -53,11 +67,8 @@ if (do download,
 
 // Generate horizontal table
 include("generateSpecificTable.jsl");
-Show(whichparams);	
-{htab,params,isspecial,dtLimits}=
-	generateSpecificTable(dataname,whichparams,defaulttospecial,wafermap,scriptdir);
+generateSpecificTable(run,scriptdir);
 
 // Generate the actual report
-::pdicts={};
 include("generateVariabilityReport.jsl");
-generateVariabilityReport(htab,params,isspecial,dtLimits);
+generateVariabilityReport(run);

@@ -1,35 +1,38 @@
 // Creates the graphical window showing the variability report
-// htab- the table to work from
-// params- list of parameter names
-// isspecial- whether the analysis is varied or just normal x-y
-// dtLimits- the limits table
 
-generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Local},
+generateVariabilityReport=Function({run},{Default Local},
 
-	// Use the next empty slot in pdicts
-	rno=N Items(::pdicts)+1;
-	::pdicts[rno]=Associative Array();
-	::pdicts[rno]["htab"]=htab;
+	splitCE=::pdicts[run]["centeredge"];
+	htab=::pdicts[run]["htab"];
+	params=::pdicts[run]["whichparams"];
+	
+	// Jo-ey set this to zero to get rid of the mean lines
+	meanlines=0;
 	
 	// If special analysis, then open a column dialog for the user to vary the analysis
-	If(isspecial,
+	If(::pdicts[run]["specialanalysis"],
 		// Give the usual variables as default
 		cd = Column Dialog(
 			xvars = ColList("X Variables",Columns(:WAFER)),
-			xgroupers =  ColList("X Grouping",Columns(:PCM_SPEC, :LOT_ID)),
+			xgroupers =  ColList("X Grouping",Columns(:LOT_ID)),
 		);
 		xvars=cd["xvars"];
 		xgroupers=cd["xgroupers"];
 		,
 		// If not special, just use those defaults
 		xvars= List(:WAFER);
-		xgroupers= List(:PCM_SPEC, :LOT_ID);
+		xgroupers= List(:LOT_ID);
 	);
 	// Create the window
 	win=New Window("Variability", vb=V List Box());
-
-	// Just setting a default used in graphical limit adjustment code
-	::up=0;
+	eval(eval expr(
+		win<<On Close(
+			Write("Closing Run "||Char(run)||".\!N");
+			Close(::pdicts[expr(run)]["htab"],No Save);
+			Close(::pdicts[expr(run)]["dtLimits"],No Save);
+			);
+	));
+	
 	
 	// For each parameter
 	For( p=1, p<=N Items(params), p+=1,	
@@ -38,35 +41,24 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		colname=params[p];
 		fail_colname=Concat(colname,"_FAILPCT");
 		
-		//Create an entry in pdicts for this parameter
-		::pdicts[rno][colname]=Associative Array();
-		
-		// Store spec limits in pdicts
-		::pdicts[rno][colname]["LSL"]=(column(htab,colname) << get property("spec limits"))["LSL"];
-		::pdicts[rno][colname]["USL"]=(column(htab,colname) << get property("spec limits"))["USL"];
-		
 		// Create an expression for the graphical limit adjustment code
 		// I can't explain the black magic that makes this section work most of the time.
 		// Might revisit, but I've tried so many things already... there's definitely some sort of
 		// race condition in JMP...
-		::pdicts[rno][colname]["script"]=eval expr(
-			Handle( .5, ::pdicts[expr(rno)][expr(colname)]["LSL"],
-				if(::up,print("doing nothing");::up=0;Stop();,
-					::pdicts[expr(rno)][expr(colname)]["lslbox"]<<set(y);
-					lslboxChanged(expr(colname),expr(rno));
-				);,
-				::up=1;
-				reSpec(expr(colname),expr(rno));
-				::up=0;
+		::pdicts[run][colname]["script"]=eval expr(
+			Handle( .5, ::pdicts[expr(run)][expr(colname)]["LSL"],
+				::pdicts[expr(run)][expr(colname)]["LSL"]=y;
+				,
+				::pdicts[expr(run)][expr(colname)]["LSL"]=y;
+				::pdicts[expr(run)][expr(colname)]["lslbox"] <<set(y);
+				User Changed Spec Limits(expr(run),expr(colname));
 			);
-			Handle( .5,::pdicts[expr(rno)][expr(colname)]["USL"],
-				if(::up,print("doing nothing");::up=0;Stop();,
-					::pdicts[expr(rno)][expr(colname)]["uslbox"]<<set(y);
-					uslboxChanged(expr(colname),expr(rno));
-				);,
-				::up=1;
-				reSpec(expr(colname),expr(rno));
-				::up=0;
+			Handle( .5,::pdicts[expr(run)][expr(colname)]["USL"],
+				::pdicts[expr(run)][expr(colname)]["USL"]=y;
+				,
+				::pdicts[expr(run)][expr(colname)]["USL"]=y;
+				::pdicts[expr(run)][expr(colname)]["uslbox"] <<set(y);
+				User Changed Spec Limits(expr(run),expr(colname));
 			);
 		);
 		
@@ -81,8 +73,21 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 			eval expr(Y(column(htab,expr(fail_colname))))
 		);
 		insertinto(varexpr,
+			eval expr(Y(column(htab,expr(fail_colname||" center")),Position(1)))
+		);
+		insertinto(varexpr,
+			eval expr(Y(column(htab,expr(fail_colname||" edge")),Position(1)))
+		);
+		insertinto(varexpr,
 			eval expr(Y(column(htab,expr(colname))))
 		);
+		insertinto(varexpr,
+			eval expr(Y(column(htab,expr(colname||" center")),Position(2)))
+		);
+		insertinto(varexpr,
+			eval expr(Y(column(htab,expr(colname||" edge")),Position(2)))
+		);
+		
 		// Noting that LOT_ID and PCM_SPEC should be chronologically ordered
 		for(i=1, i<=n items(xgroupers), i+=1,
 			if( Or((xgroupers[i]<<Get Name)=="LOT_ID",(xgroupers[i]<<Get Name)=="PCM_SPEC"),
@@ -100,109 +105,155 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 			Graph Builder(
 				Size( 850, 590 ),					// CHANGE GRAPH SIZE HERE
 				Show Control Panel( 0 ),
-				Show Legend( 0 ),
+				Show Legend( expr(splitCE) ),
 				X Group Edge( "Bottom" ),
 				expr(varexprexpr),
 				Relative Sizes( "Y", [1 3] ),
 				Elements(
 					Position( 1, 1 ),
-					Line(
-						X( 1 ),
-						X( 2 ),
-						X( 3 ),
-						Y,
-						Legend( 8 ),
-						Row order( 0 ),
-						Summary Statistic( "Mean" )
-					)
+					expr(If(splitCE,
+						expr(Line(X,Y(2),Y(3),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
+						,
+						expr(Line(X,Y(1),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
+					))
 				),
 				Elements(
 					Position( 1, 2 ),
-					Points( X( 1 ), X( 2 ), X( 3 ), Y, Legend( 1 ), Jitter( 1 ) ),
-					Box Plot(
-						X( 1 ),
-						X( 2 ),
-						X( 3 ),
-						Y,
-						Legend( 6 ),
-						Jitter( 1 ),
-						Outliers( 1 ),
-						Box Style( "Outlier" )
-					)
+					expr(If(splitCE,
+						expr(Points( X, Y(2), Y(3), Legend( 1 ), Jitter( 1 ) )),
+						expr(Points( X, Y(1), Legend( 1 ), Jitter( 1 ) )),
+					)),
+					expr(If(splitCE,
+						expr(Box Plot(X,Y(2),Y(3),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" ))),
+						expr(Box Plot(X,Y(1),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" )))	
+					)),
+					
+					expr(If(And(splitCE,meanlines),
+						expr(Line(X, Y( 2 ),	Y( 3 ),	Legend( 9 ),Row order( 0 ),Summary Statistic( "Mean" ))),
+						.
+					))
 				),
 				SendToReport(
 					Dispatch(
 						{},
 						expr(fail_colname),
 						ScaleBox,
-						{Format( "Percent", 10, 0 ), Min( 0 ), Max( 1 ), Inc( 0.1 ),			// Failure range for Jo-ey
+						{Format( "Percent", 10, 0 ), 
 						Minor Ticks( 1 ), Show Major Grid( 1 ), Show Minor Ticks( 0 ), Inside Ticks( 1 )}
 					),
 					Dispatch( {}, "400", LegendBox, {Position( {-1, -1, -1} )} ),
 					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
 					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
+					Dispatch( {}, "Y 1 title", TextEditBox, {Set Text( expr(colname) )} ),
+					Dispatch( {}, "X title", TextEditBox, {Set Text( "" )} ),
+					expr(If(And(splitCE,meanlines),
+						expr(Dispatch(
+						{},
+						"400",
+						ScaleBox,
+						{Legend Model(
+							9,
+							Properties( 0, {Line Color( 21 )} ),
+							Properties( 1, {Line Color( 19 )} )
+						)}
+						))
+					))
 				)
 			)
 		);
+		
+		//Show(vargraph);
 
 		// Build the graph and store a reference to it in pdicts
-		eval(eval expr(vb<<append(::pdicts[rno][colname]["graph"]=expr(name expr(vargraph)))));
+		eval(eval expr(vb<<append(::pdicts[run][colname]["graph"]=expr(name expr(vargraph)))));
+		Pdicts To Axis(run,colname);
+		Axis To Pdicts(run,colname);
+		Update Failures(run,colname);
 		
-		// Add in the three buttons
-		(::pdicts[rno][colname]["graph"]<<report())<<append(guibox=HListBox());
-		eval(evalexpr(guibox<<append(slob=OutlineBox("Spec Limits",
-			{"Recalc CPK",UpdateCPKrow(expr(colname),expr(rno))},
-			<<OutlineCloseOrientation(Horizontal)))));
+		
+		
+		// Build the interface below
+		
+		
+		
+		(::pdicts[run][colname]["graph"]<<report())<<append(guibox=HListBox());
+		guibox<<append(slob=OutlineBox("Spec Limits",<<OutlineCloseOrientation(Horizontal)));
+		slob<<append(limshb=H List Box());
+		(::pdicts[run][colname]["graph"]<<report())<<set title(colname);
+		(::pdicts[run][colname]["graph"]<<report())<<set auto stretching(0,0);
 		
 		slob<<append(buthb=H List Box(Align(Center)));
-		eval(eval expr(buthb<<append(ButtonBox("Activate Sliders",
-			((::pdicts[expr(rno)][expr(colname)]["graph"]<<report)[Frame Box (2)])<<remove graphics script(1);
-			((::pdicts[expr(rno)][expr(colname)]["graph"]<<report)[Frame Box (2)])<<add graphics script(
-				expr(::pdicts[rno][colname]["script"])))
-			)));
-		
-		include("populateSpecs.jsl");
-		eval(eval expr(buthb<<append(ButtonBox("Save Param",
-			setAxis(expr(colname),expr(rno));
-			specsToTable(htab,expr(dtLimits),expr(colname));
+		eval(eval expr(buthb<<append(::pdicts[run][colname]["slidercheck"]=
+			CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(colname))
 		))));
+		If(::pdicts[run]["defaulttosliders"],
+			(::pdicts[run][colname]["slidercheck"])<<Set(1);
+			ToggleSliders(run,colname)
+		);
 		
-		// Add in the Spec limit fields
-		slob<<append(limshb=H List Box());
-		(::pdicts[rno][colname]["graph"]<<report())<<set title(colname);
-		(::pdicts[rno][colname]["graph"]<<report())<<set auto stretching(0,0);
+		eval(eval expr(buthb<<append(
+			ButtonBox("Recalc CPK", RecalcCPK(expr(run),expr(colname))
+		))));
+		eval(eval expr(buthb<<append(ButtonBox("Save Param",
+			Save Param(expr(run),expr(colname));
+		))));
 		
 		limshb<<append(TextBox("<b> LSL:  </b>",<<Markup(1)));
 		eval(eval expr(limshb<<append(
-			::pdicts[rno][expr(colname)]["lslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["LSL"],10,
+			::pdicts[expr(run)][expr(colname)]["lslbox"]=NumberEditBox(::pdicts[expr(run)][expr(colname)]["LSL"],10,
 				<<Set Function(Function({},{},
-					lslboxChanged(expr(colname),expr(rno));
-					reSpec(expr(colname),expr(rno));
-					Show("After box changed.");
-					))))));
+					::pdicts[expr(run)][expr(colname)]["LSL"]=::pdicts[expr(run)][expr(colname)]["lslbox"] <<get();
+					User Changed Spec Limits(expr(run),expr(colname));
+		))))));
 		limshb<<append(TextBox("<b>  USL:  </b>",<<Markup(1)));
 		eval(eval expr(limshb<<append(
-			::pdicts[expr(rno)][expr(colname)]["uslbox"]=NumberEditBox(::pdicts[expr(rno)][expr(colname)]["USL"],10,
+			::pdicts[expr(run)][expr(colname)]["uslbox"]=NumberEditBox(::pdicts[expr(run)][expr(colname)]["USL"],10,
 				<<Set Function(Function({},{},
-					uslboxChanged(expr(colname),expr(rno));
-					reSpec(expr(colname),expr(rno));
-					))))));
+					::pdicts[expr(run)][expr(colname)]["USL"]=::pdicts[expr(run)][expr(colname)]["uslbox"] <<get();
+					User Changed Spec Limits(expr(run),expr(colname));
+
+		))))));
+		//Show(::pdicts[run][colname]["LVL"]);
+		//invalid range=Is Missing(::pdicts[run][colname]["LVL"]) | Is Missing(::pdicts[run][colname]["UVL"]);
+		lvl=::pdicts[run][colname]["LVL"];
+		uvl=::pdicts[run][colname]["UVL"];
+		If(Is Missing(lvl), lvl=Col Minimum(Column(::pdicts[run]["htab"],colname)));
+		If(Is Missing(uvl), uvl=Col Maximum(Column(::pdicts[run]["htab"],colname)));
+		//Show(uvl);Show(lvl);Write("\!N");
+			
+		eval(eval expr(guibox<<append(
+			datfilt=htab<<DataFilter(
+			Set Select(0),Set Show(1),Set Include(1),
+			<<Add Filter(
+				columns(expr(colname)),
+				where(And(
+					as column(expr(colname))>expr(lvl),
+					as column(expr(colname))<expr(uvl)
+					))
+			)
+			))));
+		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);// <<Close;
+		Write("abouttodatfilt");
+		::pdicts[run][colname]["datfilt"]=datfilt;
+		Write(::pdicts[run][colname]["datfilt"]);
 		
 		// Add in the CPK fields
 		slob<<append(cpkhb=H List Box());
 		cpkhb<<append(TextBox("<b> Mean:  </b>",<<Markup(1)));
 		eval(eval expr(cpkhb<<append(
-			::pdicts[expr(rno)][expr(colname)]["meanbox"]=
+			::pdicts[expr(run)][expr(colname)]["meanbox"]=
 				TextBox("Hit Calc";))));
 		cpkhb<<append(TextBox("<b>  CPL:  </b>",<<Markup(1)));
 		eval(eval expr(cpkhb<<append(
-			::pdicts[expr(rno)][expr(colname)]["cplbox"]=
+			::pdicts[expr(run)][expr(colname)]["cplbox"]=
 				TextBox("Hit Calc";))));
 		cpkhb<<append(TextBox("<b>  CPU:  </b>",<<Markup(1)));
 		eval(eval expr(cpkhb<<append(
-			::pdicts[expr(rno)][expr(colname)]["cpubox"]=
+			::pdicts[expr(run)][expr(colname)]["cpubox"]=
 				TextBox("Hit Calc";))));
 		slob<<append(medhb=HListBox());
+		RecalcCPK(run,colname);
+		
 		
 		// Get the median from an invisible stats table
 		eval(eval expr(
@@ -218,82 +269,130 @@ generateVariabilityReport=Function({htab,params,isspecial,dtLimits},{Default Loc
 		t<<Close Window();
 		Close("Stats",NoSave);
 		medhb<<append(TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)));
-		
-		// Add the hold scales button
-		eval(eval expr(buthb<<append(ButtonBox("Hold Scales",setAxis(expr(colname),expr(rno))))));
-		
-		// Add a Data Filter and put a RECALC CPK button inside it.
-		eval(eval expr(guibox<<append(
-			datfilt=htab<<DataFilter(Filter Columns(expr(colname)),Set Select(0),Set Show(1),Set Include(1)))));
-		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal) <<Close;
-		eval(eval expr(guibox[ButtonBox(8)]
-			<<Sib Append(ButtonBox("RECALC CPK",updateCPKrow(expr(colname),expr(rno));))));
-		
-		// Do the CPK Calculations
-		updateCPKRow(colname,rno);
 	);
-
 );
 
-// Update the limit in pdicts from the value in the box
-lslboxChanged=Function({colname,rno},{Default Local},
-	newlsl=::pdicts[rno][colname]["lslbox"] <<get();
-	::pdicts[rno][colname]["LSL"]=newlsl;
-);
-uslboxChanged=Function({colname,rno},{Default Local},
-	newusl=::pdicts[rno][colname]["uslbox"] <<get();
-	::pdicts[rno][colname]["USL"]=newusl;
-);
 
-// Update the spec limits in the table properties
-reSpec=Function({colname,rno},{Default Local},
+Save Param=Function({run,param},{Default Local},
+	Axis to Pdicts(run,param);
+	Filter to Pdicts(run,param);
+	pd=::pdicts[run][param];
 	
-	setAxis(colname,rno);
-	newprops= eval expr({
-			LSL(expr(::pdicts[rno][colname]["LSL"])),
-			USL(expr(::pdicts[rno][colname]["USL"])),
-			TARGET(.),
-			Show Limits(1),
-			Add Ref Line(expr(::pdicts[rno][colname]["LSL"]),0,5,"LSL");
-			Add Ref Line(expr(::pdicts[rno][colname]["USL"]),0,5,"USL");
-	});
-	htab=::pdicts[rno]["htab"];
-	column(htab,colname)<<Delete Property("Spec Limits");
-	eval(eval expr(column(htab,colname)<<Set Property("Spec Limits",expr(newprops))));
-	column(htab,concat(colname,"_FAILBOOL")) <<EvalFormula();
-	column(htab,concat(colname,"_FAILPCT")) <<EvalFormula();
+	dtLimits=::pdicts[run]["dtLimits"];
+	r=pd["row"];
+	Column(dtLimits,"AXIS_SCALE")[r]=pd["SCALE"];
+	Column(dtLimits,"AXIS_LOW")[r]=pd["LAL"];
+	Column(dtLimits,"AXIS_HIGH")[r]=pd["UAL"];
+	Column(dtLimits,"SPEC_LOW")[r]=pd["LSL"];
+	Column(dtLimits,"SPEC_HIGH")[r]=pd["USL"];
+	Column(dtLimits,"VALID_LOW")[r]=pd["LVL"];
+	Column(dtLimits,"VALID_HIGH")[r]=pd["UVL"];
+	Column(dtLimits,"AXIS_INC")[r]=pd["INC"];
 	
-	updateCPKrow(colname,rno);
-);
-
-// Update the axis limits in the table properties so the graphics doesn't revert them
-setAxis=Function({colname,rno},{Default Local},
-	((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Save To Column Property;
-	
-	col=column(::pdicts[rno]["htab"],colname);
-	
-	ax script=((::pdicts[rno][colname]["graph"]<<report)[axis box(3)])<<Get Script;
-	clean ax script={};
-	for (a=1, a<=n items(ax script), a+=1,
-		if (headname(ax script[a])!="Add Ref Line",
-			clean ax script[N Items(clean ax script)+1]=ax script[a];
-			);
-	);
-	eval(eval expr(col<< Set Property("Axis", expr(clean ax script))));
-	
+	dtLimits<<Save;
 );
 
 // Runs the CPK Calculation
-updateCPKrow=Function({colname,rno},{Default Local},
+RecalcCPK=Function({run,param},{Default Local},
 	Write("Updating CPK\!N");
-	col=column(::pdicts[rno]["htab"],colname);
+	col=column(::pdicts[run]["htab"],param);
 	
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
 	
-	cpu=(::pdicts[rno][colname]["USL"]-mu)/(3*sigma);
-	cpl=(mu-::pdicts[rno][colname]["LSL"])/(3*sigma);
+	cpu=(::pdicts[run][param]["USL"]-mu)/(3*sigma);
+	cpl=(mu-::pdicts[run][param]["LSL"])/(3*sigma);
 	
-	::pdicts[rno][colname]["meanbox"]<<set text(Format(mu,"Best",7));
-	::pdicts[rno][colname]["cplbox"]<<set text(char(round(cpl,3)));
-	::pdicts[rno][colname]["cpubox"]<<set text(char(round(cpu,3)));
+	::pdicts[run][param]["meanbox"]<<set text(Format(mu,"Best",7));
+	::pdicts[run][param]["cplbox"]<<set text(char(round(cpl,3)));
+	::pdicts[run][param]["cpubox"]<<set text(char(round(cpu,3)));
+);
+
+
+Toggle Sliders=Function({run,param},{Default Local},
+	If(::pdicts[run][param]["slidercheck"]<<Get(),
+		Write("about to add\!N");
+		eval(eval expr(((::pdicts[run][param]["graph"] << report)[Frame Box(2)])
+			<<Add Graphics Script(expr(::pdicts[run][param]["script"]))));
+		,
+		Write("about to remove\!N");
+		((::pdicts[run][param]["graph"] << report)[Frame Box(2)])<<Remove Graphics Script(1);
+	)
+);
+
+
+User Changed Spec Limits=Function({run,param},{Default Local},
+	Write("Changing spec lims\!N");
+	Axis To Pdicts(run,param);
+	Pdicts To Axis(run,param);
+	Update Failures(run,param);
+	updateCPKrow(run,param);
+);
+
+Pdicts To Axis=Function({run,param},{Default Local},
+	props to axis=eval expr({
+		Min(expr(::pdicts[run][param]["LAL"])),
+		Max(expr(::pdicts[run][param]["UAL"])),
+		Inc(expr(::pdicts[run][param]["INC"])),
+		Scale(expr(::pdicts[run][param]["SCALE"]))
+		// Jo-ey get rid of the next two lines
+		,Add Ref Line(expr(::pdicts[run][param]["USL"]), Solid, "Black", "USL", 1)
+		,Add Ref Line(expr(::pdicts[run][param]["LSL"]), Solid, "Black", "LSL", 1)
+	});	
+	eval(eval expr(::pdicts[run][param]["graph"]<<SendToReport(
+		Dispatch({},
+			expr(param),
+			ScaleBox,
+			expr(props to axis)
+		)
+	)));
+);
+
+Axis to Pdicts=Function({run,param},{Default Local},
+	Try(
+		ax script=((::pdicts[run][param]["graph"]<<report)[axis box(3)])<<Get Script;,
+		Throw("Invalid axis limits for current data!");
+	);
+	//Write(ax script);
+	::pdicts[run][param]["LAL"]=ax script["Min"];
+	::pdicts[run][param]["UAL"]=ax script["Max"];
+	::pdicts[run][param]["INC"]=ax script["Inc"];
+	::pdicts[run][param]["SCALE"]=ax script["Scale"];
+);
+
+Filter to Pdicts=Function({run,param},{Default Local},
+	description=(::pdicts[run][param]["datfilt"])<< get where clause;
+	
+	lpat=":Name\( \!""||param||"\!" \) > ([\d\.e\+\-]+)";
+	upat=":Name\( \!""||param||"\!" \) < ([\d\.e\+\-]+)";
+	
+	lvlmatch=Regex Match(description,lpat);
+	lvl=If(Length(lvlmatch)==2,	Parse(lvlmatch[2]),.);
+	uvlmatch=Regex Match(description,upat);
+	uvl=If(Length(uvlmatch)==2,	Parse(uvlmatch[2]),.);
+	
+	If(lvl<=Col Minimum(Column(::pdicts[run]["htab"],param)),lvl=.);
+	If(uvl>=Col Maximum(Column(::pdicts[run]["htab"],param)),uvl=.);
+	
+	Show(lvlmatch);Show(uvlmatch);Write("\!N");
+	Show(lvl);Show(uvl);Write("\!N");
+	
+	::pdicts[run][param]["LVL"]=lvl;
+	::pdicts[run][param]["UVL"]=uvl;	
+	
+);
+
+Update Failures=Function({run,param},{Default Local},
+	column(::pdicts[run]["htab"],concat(param,"_FAILBOOL")) <<EvalFormula();
+	column(::pdicts[run]["htab"],concat(param,"_FAILPCT")) <<EvalFormula();
+	column(::pdicts[run]["htab"],concat(param,"_FAILBOOL center")) <<EvalFormula();
+	column(::pdicts[run]["htab"],concat(param,"_FAILPCT center")) <<EvalFormula();
+	column(::pdicts[run]["htab"],concat(param,"_FAILBOOL edge")) <<EvalFormula();
+	column(::pdicts[run]["htab"],concat(param,"_FAILPCT edge")) <<EvalFormula();
+	eval(eval expr(::pdicts[run][param]["graph"]<<SendToReport(
+		Dispatch({},
+			expr(param||"_FAILPCT"),
+			ScaleBox,
+			{Min( 0 ), Max( 1 ), Inc( 0.1 )}			// Failure range for Jo-ey}
+		)
+	)));
 );
