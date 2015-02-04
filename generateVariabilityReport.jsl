@@ -145,9 +145,14 @@ generateVariabilityReport=Function({run},{Default Local},
 						expr(Box Plot(X,Y(1),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" )))	
 					)),
 					
-					// Lines through the mean of data if indicated in rundicts
-					expr(If(And(splitCE,::rundicts[run]["meanlines"]),
-						expr(Line(X, Y( 2 ),	Y( 3 ),	Legend( 9 ),Row order( 0 ),Summary Statistic( "Mean" ))),
+					// Lines through the mean/median of data if indicated in rundicts
+					expr(If(Not(::rundicts[run]["tracklines"]=="None"),
+						If(splitCE,
+							eval expr(Line(X, Y( 2 ),	Y( 3 ),	Legend( 9 ),Row order( 0 ),
+								Summary Statistic( expr(::rundicts[run]["tracklines"]) ))),
+							eval expr(Line(X, Y( 1 ),	Legend( 9 ),Row order( 0 ),
+								Summary Statistic( expr(::rundicts[run]["tracklines"]) )))
+						),
 						.
 					))
 				),
@@ -179,19 +184,25 @@ generateVariabilityReport=Function({run},{Default Local},
 					// Remove the unneeded title from the X-axis
 					Dispatch( {}, "X title", TextEditBox, {Set Text( "" )} ),
 					
-					// Change the mean lines color to match the points colors
-					expr(If(And(splitCE,meanlines),
-						expr(Dispatch(
-						{},
-						"400",
-						ScaleBox,
-						{Legend Model(
-							9,
-							Properties( 0, {Line Color( 21 )} ),
-							Properties( 1, {Line Color( 19 )} )
-						)}
-						))
-					))
+					// Change the mean/median lines color to match the points colors
+					expr(If(Not(::rundicts[run]["tracklines"]=="None"),
+						If(splitCE,
+							expr(Dispatch(
+							{},
+							"400",
+							ScaleBox,
+							{Legend Model(
+								9,
+								Properties( 0, {Line Color( 21 )} ),
+								Properties( 1, {Line Color( 19 )} )
+							)})),
+							expr(Dispatch(
+								{},
+								"400",
+								ScaleBox,
+								{Legend Model( 9, Properties( 0, {Line Color( 0 )} ) )}
+							))
+						)))
 				)
 			)
 		);
@@ -275,8 +286,8 @@ generateVariabilityReport=Function({run},{Default Local},
 			<<Add Filter(
 				columns(expr(param)),
 				where(And(
-					as column(expr(param))>expr(lvl),
-					as column(expr(param))<expr(uvl)
+					as column(expr(param))>=expr(lvl),
+					as column(expr(param))<=expr(uvl)
 					))
 		)))));
 		::rundicts[run]["pdict"][param]["datfilt"]=datfilt;
@@ -328,22 +339,47 @@ generateVariabilityReport=Function({run},{Default Local},
 			
 				// Script for "as the mouse drags":
 				// Purely aesthetic, adjust the LSL in rundicts so the handle moves along with the mouse
-				::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
+				Try(::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;)
 				,
 				// Script for "when the mouse releases":
 				// Update the LSL in rundicts and in the text box, then call User Changed Spec limits
-				::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
-				::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<set(y);
-				User Changed Spec Limits(expr(run),expr(param));
+				// If there's an error (JMP has some race-condition bug here...), wait a sec and try again.
+				Try(
+					::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
+					::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<set(y);
+					User Changed Spec Limits(expr(run),expr(param));
+					,					
+					Try(
+						Write("Graphics Error.\!N");
+						Wait(1);
+						::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
+						::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<set(y);
+						User Changed Spec Limits(expr(run),expr(param));
+						Write("Recovered\!N");,
+						Write("Couldn't Recover\!N");
+					);
+				)
 			);
 			
 			// Same stuff for the USL handle
 			Handle( .5,::rundicts[expr(run)]["pdict"][expr(param)]["USL"],
-				::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
+				Try(::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;)
 				,
-				::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
-				::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<set(y);
-				User Changed Spec Limits(expr(run),expr(param));
+				Try(
+					::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
+					::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<set(y);
+					User Changed Spec Limits(expr(run),expr(param));
+					,
+					Try(
+						Write("Graphics Error.\!N");
+						Wait(1);
+						::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
+						::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<set(y);
+						User Changed Spec Limits(expr(run),expr(param));
+						Write("Recovered\!N");,
+						Write("Couldn't Recover\!N");
+					);
+				)
 			);
 		);
 	);
@@ -463,10 +499,12 @@ Filter to Rundicts=Function({run,param},{Default Local},
 
 	// Get the "where clause" from the data filter
 	description=(::rundicts[run]["pdict"][param]["datfilt"])<< get where clause;
+	//Write(description||"\!N");
+	Write("SAM, clear selection\!N");
 	
 	// Regexes for extracting upper and lower limits from the where clause
-	lpat=":Name\( \!""||param||"\!" \) > ([\d\.e\+\-]+)";
-	upat=":Name\( \!""||param||"\!" \) < ([\d\.e\+\-]+)";
+	lpat=":(?:Name\( \!")*"||param||"(?:\!" \))* >=+ ([\d\.e\+\-]+)";
+	upat=":(?:Name\( \!")*"||param||"(?:\!" \))* <=+ ([\d\.e\+\-]+)";
 	
 	// Try the regexes.  If they succeed, use the extracted values, otherwise use '.'
 	lvlmatch=Regex Match(description,lpat);
@@ -479,6 +517,7 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	If(lvl<=Col Minimum(Column(::rundicts[run]["htab"],param)),lvl=.);
 	If(uvl>=Col Maximum(Column(::rundicts[run]["htab"],param)),uvl=.);
 	
+	//Write("LVL: "||Char(lvl)||" UVL: "||Char(uvl)||"\!N");
 	// Save to rundicts
 	::rundicts[run]["pdict"][param]["LVL"]=lvl;
 	::rundicts[run]["pdict"][param]["UVL"]=uvl;	

@@ -72,6 +72,7 @@ generateSpecificTable=Function({run},{Default Local},
 			Split( :VALUE ),
 			Output Table( "Pre-Join Horizontal" ),
 			Remaining Columns( Keep(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD ) ),
+			Group(:WAT_FILE_KEY, :WAFER, :SITE),
 			Private
 		);
 	Close(ptab,No Save);
@@ -105,23 +106,35 @@ generateSpecificTable=Function({run},{Default Local},
 						Show Control Panel( 0 ),
 						Add Table(
 							Column Table( Analysis Columns( expr(column(phtab,param) ) ) ),
-							Row Table( Statistics( Median, Interquartile Range ) )
+							Row Table( Statistics( Median, Interquartile Range, Min ) )
 						),
 						<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
 					)));
 				
-				// Read out the median and interquartile range
+				// Read out the median, interquartile range, and min
 				// then close the stats table and window
 				med=Column(DataTable("Stats"),param)[1];
 				iqr=Column(DataTable("Stats"),param)[2];
+				dmin=Column(DataTable("Stats"),param)[3];
 				t<<Close Window();
 				Close("Stats",NoSave);
 				
-				// Calculate some reasonable axis values
-				// 6 interquartile ranges, centered about the median.
-				lal=med-3*iqr;
-				ual=med+3*iqr;
-				inc=(ual-lal)/7;
+				// Calculate some reasonable and round axis values, roughly median+/-3 interquartile ranges.
+				order of magnitude inc=10^Round(Log10(iqr));
+				inc=Round(iqr/order of magnitude inc)*order of magnitude inc;
+				lal=Floor((med-3*iqr)/inc)*inc;
+				ual=Ceiling((med+3*iqr)/inc)*inc;
+				
+				// If there was a problem with that, then don't bother trying to make the values round.
+				If(Is Missing(inc),
+					lal=med-3*iqr;
+					ual=med+3*iqr;
+					inc=(ual-lal)/7;
+				);
+				
+				// If all the data is positive, don't let the lower limit be negative
+				lal=If(dmin>0, Max(lal,0),lal);
+				
 			);
 			
 			// If the limits table says the data should be inverted
@@ -171,7 +184,8 @@ generateSpecificTable=Function({run},{Default Local},
 		Drop multiples( 0, 0 ),
 		Name( "Include non-matches" )(0, 0),
 		Preserve main table order( 1 ),
-		Output Table( "HORIZONTAL" ),
+		Output Table Name("Horizontal, Run" || Char(run) )//,
+		//Invisible
 	);
 	Close(dtWAT, No Save);
 	Close(phtab, No Save);
@@ -199,24 +213,29 @@ generateSpecificTable=Function({run},{Default Local},
 				Suppress Hidden Rows( 1 ),
 				Suppress Hidden Columns( 1 ),
 				Treat as Hierarchy( 0 )
-			),
-			Private
+			)//,
+			//Private
 		);
 
 		// Check to see if it's missing the columns we need for matching...
 		splittab columns=splittab<<Get Column Names;
 		full lot col num=contains(splittab columns,As Name("Full Lot"));
-		wafer col num=contains(splittab columns,As Name("Wafer"));		
+		wafer col num=contains(splittab columns,As Name("Wafer"));
+		
 		if( not(full lot col num &  wafer col num),
 		
 			// If so, let the user know
 			Write("Splits table incorrectly formatted!\!N");,
 			
 			// Otherwise proceed to merge the tables, and close the component tables
+			Column(splittab,"Full Lot")<<Set Name("LOT_ID");
+			Column(splittab,"Wafer")<<Set Name("WAFER");
+			splittab<<Delete Column(Base Lot);
+			//Stop();
 			htab=htabwat << Join(
 					With(splittab),
-					By Matching Columns(:LOT_ID = :Full Lot, :WAFER = :Wafer),
-					Merge Same Name Column,
+					By Matching Columns(:LOT_ID = :LOT_ID, :WAFER = :WAFER),
+					Merge Same Name Columns,
 					Preserve Main Table Order(1),
 					Suppress Formula Evaluation(1),
 					Include Non Matches(1,0),
@@ -229,6 +248,8 @@ generateSpecificTable=Function({run},{Default Local},
 		,
 		// Otherwise, if not splits file found, inform the user.
 		Write("Didn't find splits file.  Proceeding without.\!N");
+		htab=htabwat;
+		htab<<Set Name("Joined Horizontal, Run" || Char(run) );
 	);
 	
 	// We're about to make a bunch of tweaks to the table, so let's warn JMP

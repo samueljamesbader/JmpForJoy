@@ -1,6 +1,8 @@
 // Use the local namespace
 Names Default To Here(1);
 
+Write(whichparams);
+
 // Later, we'll want the JmpForJoy directory
 ::scriptdir=Get Default Directory();
 
@@ -21,7 +23,7 @@ run=N Items(::rundicts)+1;
 ::rundicts[run]["centeredge"]=defaulttoCE;
 ::rundicts[run]["defaulttosliders"]=defaulttosliders;
 ::rundicts[run]["splitsfile"]=splitsfile;
-::rundicts[run]["meanlines"]=meanlines;
+::rundicts[run]["tracklines"]=tracklines;
 ::rundicts[run]["graphsize"]=eval expr(Size(expr(graphwidth),expr(graphheight)));
 ::rundicts[run]["showlegend"]=showlegend;
 ::rundicts[run]["showreflines"]=showreflines;

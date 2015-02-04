@@ -1,0 +1,52 @@
+Names Default To Here(1);
+Close All(Reports);
+dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+limpath="saved_data/"||dataname||".LIMITS.jmp";
+dtLimits=open(limpath,private);
+defdir=Get Default Directory();
+all params=column(dtLimits,"Parameter")<<Get Values;
+close(dtLimits,No Save);
+
+::front=Associative Array();
+::front["whichparams"]={};
+
+eval(eval expr(New Window("Launch JmpForJoy",
+	<<Show Toolbars(0),
+	<<Show Menu(0),
+	HListBox(
+		VListBox(
+			parambox=ListBox(all params),
+			ButtonBox("Clear Selection",parambox<<clear selection())
+		),
+		VListBox(
+			HListBox(
+				TextBox("Splits file: "),
+				splitsbox=TextEditBox("splits\joey_splits.xlsx",<<Set Width(150)),
+			),
+			HListBox(
+				TextBox("Width: "),
+				widthbox=NumberEditBox(850,4),
+				TextBox("     Height: "),
+				heightbox=NumberEditBox(590,4)
+			),
+			HListBox(
+				TextBox("Track Lines:    "),
+				tracklinesbox=ComboBox({"None","Median","Mean"})
+			),
+			specialbox=CheckBox("Special Analysis"),
+			splitCEbox=CheckBox("Split Center/Edge"),
+			ButtonBox("Go",
+				whichparams=parambox<<get selected();
+				defaulttospecial=specialbox<<get();
+				defaulttoCE=splitCEbox<<get();
+				defaulttosliders=0;
+				splitsfile=splitsbox<<get text();
+				graphwidth=widthbox<<get();
+				graphheight=heightbox<<get();
+				tracklines=tracklinesbox<<get selected();
+				showlegend=0;
+				showreflines=1;
+				do download=0;
+				get limits=0;
+				Include(expr(defdir||"main.jsl"))))
+))));
