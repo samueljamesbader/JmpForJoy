@@ -271,26 +271,40 @@ generateVariabilityReport=Function({run},{Default Local},
 					User Changed Spec Limits(expr(run),expr(param))))))));
 		
 		
-		// Get the valid low and valid high from rundicts; if they're missing, then use the min and max of the data
+		// Get the valid low and valid high from rundicts
 		lvl=::rundicts[run]["pdict"][param]["LVL"];
 		uvl=::rundicts[run]["pdict"][param]["UVL"];
-		If(Is Missing(lvl), lvl=Col Minimum(Column(::rundicts[run]["htab"],param)));
-		If(Is Missing(uvl), uvl=Col Maximum(Column(::rundicts[run]["htab"],param)));
 		
-		// Add a data filter, using the just obtained values as the default limits,
-		// and store a reference to it in rundicts
-		// Also, tell JMP that when the filter is closed, it should close horizontally for aesthetic reasons
+		// Add a data filter and store a reference to it in rundicts
 		eval(eval expr(guibox<<append(
-			datfilt=htab<<DataFilter(
-			Set Select(0),Set Show(1),Set Include(1),
-			<<Add Filter(
-				columns(expr(param)),
-				where(And(
-					as column(expr(param))>=expr(lvl),
-					as column(expr(param))<=expr(uvl)
-					))
-		)))));
+				datfilt=htab<<DataFilter(
+				Set Select(0),Set Show(1),Set Include(1),
+				Add( Filter Columns(as name(expr(param))))
+		))));
 		::rundicts[run]["pdict"][param]["datfilt"]=datfilt;
+		
+		
+		// Use the just-obtained lvl and uvl as the default filter limits
+		// The expression is slightly different depending on which values are missing.
+		If(Not(Is Missing(lvl)) & Not(Is Missing(uvl)),
+			eval(eval expr(
+				datfilt<< (Filter Column(expr(as name(param))) <<
+					where(	as column(expr(param))>=expr(lvl) &
+							as column(expr(param))<=expr(uvl)))))	
+			,
+			If(Not(Is Missing(lvl)),
+				eval(eval expr(
+					datfilt<< (Filter Column(expr(as name(param))) <<
+						where(as column(expr(param))>=expr(lvl)))))	
+			);
+			If(Not(Is Missing(uvl)),
+				eval(eval expr(
+					datfilt<< (Filter Column(expr(as name(param))) <<
+						where(as column(expr(param))<=expr(uvl)))))	
+			);
+		);
+		
+		// Also, tell JMP that when the filter is closed, it should close horizontally for aesthetic reasons
 		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);
 		
 		// cpkhb holds the CPK-related fields
@@ -313,23 +327,25 @@ generateVariabilityReport=Function({run},{Default Local},
 		// Run the calculation for CPK
 		RecalcCPK(run,param);
 		
-		// Get the unfiltered data median from an invisible stats table
+		// Get the unfiltered data median and iqr from an invisible stats table
 		// Close the invisible table and associated extraneous window
-		// Add the median field to medhb and add medhb to slob
+		// Add the median and iqr fields to medhb and add medhb to slob
 		eval(eval expr(
 		t=htab<<Tabulate(
 			Show Control Panel( 0 ),
 			Add Table(
 				Column Table( Analysis Columns( expr(column(htab,param) ) ) ),
-				Row Table( Statistics( Median) )
+				Row Table( Statistics( Median, Interquartile Range) )
 			),
 			<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
 		)));
 		med=Column(DataTable("Stats"),param)[1];
+		iqr=::rundicts[run]["pdict"][param]["iqr"]=Column(DataTable("Stats"),param)[2];
 		t<<Close Window();
 		Close("Stats",NoSave);
-		slob<<append(medhb=HListBox());
+		slob<<append(medhb=VListBox());
 		medhb<<append(TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)));
+		medhb<<append(TextBox("<b> Unfiltered IQR:  </b>"||Format(iqr,"Best",7),<<Markup(1),<<SetWidth(200)));
 		
 		// Script for the graphical handles (I call them "sliders") on the spec limits
 		::rundicts[run]["pdict"][param]["script"]=eval expr(
@@ -403,45 +419,61 @@ Save Param=Function({run,param},{Default Local},
 	Column(dtLimits,"AXIS_SCALE")[r]=pd["SCALE"];
 	Column(dtLimits,"AXIS_LOW")[r]=pd["LAL"];
 	Column(dtLimits,"AXIS_HIGH")[r]=pd["UAL"];
-	Column(dtLimits,"SPEC_LOW")[r]=pd["LSL"];
-	Column(dtLimits,"SPEC_HIGH")[r]=pd["USL"];
 	Column(dtLimits,"VALID_LOW")[r]=pd["LVL"];
 	Column(dtLimits,"VALID_HIGH")[r]=pd["UVL"];
 	Column(dtLimits,"AXIS_INC")[r]=pd["INC"];
+	Column(dtLimits,"MINOR_TICKS")[r]=pd["MT"];
+	Column(dtLimits,"FORMAT")[r]=pd["FORMAT"];
+	
+	If(pd["VALINV"],
+		Column(dtLimits,"SPEC_LOW")[r]=-pd["USL"];
+		Column(dtLimits,"SPEC_HIGH")[r]=-pd["LSL"];
+		,
+		Column(dtLimits,"SPEC_LOW")[r]=pd["LSL"];
+		Column(dtLimits,"SPEC_HIGH")[r]=pd["USL"];
+	);
 	
 	// Save dtLimits
 	dtLimits<<Save;
+	
+	Write("Presumably just saved limits\!N");
 );
 
 // Runs the CPK Calculation and updates the CPK fields
 RecalcCPK=Function({run,param},{Default Local},
 	Write("Updating CPK\!N");
 	
+	// Short name for the relevant parameter dictionary
+	pd=::rundicts[run]["pdict"][param];
+	
 	// Use the summarize function to get the relevant column statistics
 	col=column(::rundicts[run]["htab"],param);
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
 	
 	// Calculate values
-	cpu=(::rundicts[run]["pdict"][param]["USL"]-mu)/(3*sigma);
-	cpl=(mu-::rundicts[run]["pdict"][param]["LSL"])/(3*sigma);
+	cpu=(pd["USL"]-mu)/(3*sigma);
+	cpl=(mu-pd["LSL"])/(3*sigma);
 	
 	// Update fieds
-	::rundicts[run]["pdict"][param]["meanbox"]<<set text(Format(mu,"Best",7));
-	::rundicts[run]["pdict"][param]["cplbox"]<<set text(char(round(cpl,3)));
-	::rundicts[run]["pdict"][param]["cpubox"]<<set text(char(round(cpu,3)));
+	pd["meanbox"]<<set text(Format(mu,"Best",7));
+	pd["cplbox"]<<set text(char(round(cpl,3)));
+	pd["cpubox"]<<set text(char(round(cpu,3)));
 );
 
 // Adds or removes the draggable handles to/from the graph when the checkbox is changed
 Toggle Sliders=Function({run,param},{Default Local},
 
+	// Short name for the relevant parameter dictionary
+	pd=::rundicts[run]["pdict"][param];
+	
 	// If checkbox is "yes"...
-	If(::rundicts[run]["pdict"][param]["slidercheck"]<<Get(),
+	If(pd["slidercheck"]<<Get(),
 		// add the graphics script
-		eval(eval expr(((::rundicts[run]["pdict"][param]["graph"] << report)[Frame Box(2)])
-			<<Add Graphics Script(expr(::rundicts[run]["pdict"][param]["script"]))));
+		eval(eval expr(((pd["graph"] << report)[Frame Box(2)])
+			<<Add Graphics Script(expr(pd["script"]))));
 		,
 		// otherwise, remove the graphics script
-		((::rundicts[run]["pdict"][param]["graph"] << report)[Frame Box(2)])<<Remove Graphics Script(1);
+		((pd["graph"] << report)[Frame Box(2)])<<Remove Graphics Script(1);
 	)
 );
 
@@ -457,41 +489,62 @@ User Changed Spec Limits=Function({run,param},{Default Local},
 // Applies releveant properties from rundicts to the axis
 Rundicts To Axis=Function({run,param},{Default Local},
 
+	// Short name for the relevant parameter dictionary
+	pd=::rundicts[run]["pdict"][param];
+	
 	// Expression of the properties
 	props to axis=eval expr({
-		Min(expr(::rundicts[run]["pdict"][param]["LAL"])),
-		Max(expr(::rundicts[run]["pdict"][param]["UAL"])),
-		Inc(expr(::rundicts[run]["pdict"][param]["INC"])),
-		Scale(expr(::rundicts[run]["pdict"][param]["SCALE"]))
+		Min(expr(pd["LAL"])),
+		Max(expr(pd["UAL"])),
+		Inc(expr(pd["INC"])),
+		Scale(expr(pd["SCALE"])),
+		expr(Parse(pd["FORMAT"])),
+		expr(eval expr(Minor Ticks(expr(pd["MT"]))))
 	});	
 	
 	// If ref lines are desired, add them in as well
 	If(::rundicts[run]["showreflines"],
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(::rundicts[run]["pdict"][param]["USL"]), Solid, "Black", "USL", 1)));
+			eval expr(Add Ref Line(expr(pd["USL"]), Solid, "Black", "USL", 1)));
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(::rundicts[run]["pdict"][param]["LSL"]), Solid, "Black", "LSL", 1)));
+			eval expr(Add Ref Line(expr(pd["LSL"]), Solid, "Black", "LSL", 1)));
 	);
-	
+		
 	// Send the expression to the graph
-	eval(eval expr(::rundicts[run]["pdict"][param]["graph"]<<SendToReport(
+	eval(eval expr(pd["graph"]<<SendToReport(
 		Dispatch({}, expr(param), ScaleBox,	expr(props to axis)))));
 );
 
 // Reads values from the axis and saves them to rundicts
 Axis to Rundicts=Function({run,param},{Default Local},
 
+	// Short name for the relevant parameter dictionary
+	pd=::rundicts[run]["pdict"][param];
+
 	// Get the "axis script", throwing an error if you can't.
 	Try(
-		ax script=((::rundicts[run]["pdict"][param]["graph"]<<report)[axis box(3)])<<Get Script;,
+		ax script=((pd["graph"]<<report)[axis box(3)])<<Get Script;,
 		Throw("Invalid axis limits for current data!");
 	);
+	
+	Show(ax script);
 	
 	// Save values from the axis script into rundicts
 	::rundicts[run]["pdict"][param]["LAL"]=ax script["Min"];
 	::rundicts[run]["pdict"][param]["UAL"]=ax script["Max"];
 	::rundicts[run]["pdict"][param]["INC"]=ax script["Inc"];
 	::rundicts[run]["pdict"][param]["SCALE"]=ax script["Scale"];
+	::rundicts[run]["pdict"][param]["MT"]=ax script["Minor Ticks"];
+	
+	// It's a bit trickier to extract the format from axis script
+	// Cycle through ax script looking for an expression whose head is "Format()"
+	For(i=1,i<=Length(ax script),i++,
+		::rundicts[run]["pdict"][param]["FORMAT"]=
+			If(Head Expr(ax script[i])==expr(Format()),
+				Char(ax script[i]),
+				::rundicts[run]["pdict"][param]["FORMAT"]
+	));
+	
 );
 
 // Reads valid limits from the data filter into rundicts
@@ -500,7 +553,6 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	// Get the "where clause" from the data filter
 	description=(::rundicts[run]["pdict"][param]["datfilt"])<< get where clause;
 	//Write(description||"\!N");
-	Write("SAM, clear selection\!N");
 	
 	// Regexes for extracting upper and lower limits from the where clause
 	lpat=":(?:Name\( \!")*"||param||"(?:\!" \))* >=+ ([\d\.e\+\-]+)";
@@ -512,12 +564,15 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	uvlmatch=Regex Match(description,upat);
 	uvl=If(Length(uvlmatch)==2,	Parse(uvlmatch[2]),.);
 	
-	// If the extracted values are beyond/equal to the data's extremes, then that direction is just
-	// not being filtered, and should be ignored (ie use '.')
-	If(lvl<=Col Minimum(Column(::rundicts[run]["htab"],param)),lvl=.);
-	If(uvl>=Col Maximum(Column(::rundicts[run]["htab"],param)),uvl=.);
+	// If the extracted values are "near to"" the data's extremes, then the user probably
+	// does not mean to filter in that direction, so the limit should be ignored (ie use '.')
+	//
+	// "near to" = within one hundredth of an (unfiltered) IQR
+	iqr=::rundicts[run]["pdict"][param]["iqr"];
+	If(Abs(lvl-Col Minimum(Column(::rundicts[run]["htab"],param)))<iqr/100,lvl=.);
+	If(Abs(uvl-Col Maximum(Column(::rundicts[run]["htab"],param)))<iqr/100,uvl=.);
 	
-	//Write("LVL: "||Char(lvl)||" UVL: "||Char(uvl)||"\!N");
+	Write("Saving LVL: "||Char(lvl)||" UVL: "||Char(uvl)||"\!N");
 	// Save to rundicts
 	::rundicts[run]["pdict"][param]["LVL"]=lvl;
 	::rundicts[run]["pdict"][param]["UVL"]=uvl;	

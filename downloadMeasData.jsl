@@ -23,8 +23,8 @@ datdir="http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/";
 downloadMeasData=Function( {dataname, getlimits, ground rules key},{Default Local},
 
 	// Create saved_data if it doesn't already exist
-	if (not(directory exists("saved_data")),
-		create directory("saved_data"););
+	if (not(directory exists(::scriptdir||"saved_data")),
+		create directory(::scriptdir||"saved_data"););
 
 	// Get the zip data from the website, import it, and save it.
 	Write("Getting main data...\!N");
@@ -64,7 +64,7 @@ downloadMeasData=Function( {dataname, getlimits, ground rules key},{Default Loca
 			Year Rule( "20xx" )
 		)
 	);
-	close(dtRaw,Save("saved_data/"||dataname||".jmp"));
+	close(dtRaw,Save(::scriptdir||"saved_data/"||dataname||".jmp"));
 	
 	// Load the limit data from the website, sort it by parameter, add necessary spec columns,
 	// apply Dave's rules, and save it.
@@ -101,11 +101,13 @@ downloadMeasData=Function( {dataname, getlimits, ground rules key},{Default Loca
 		dtLimits << New Column( "AXIS_LOW", Numeric, Continuous, Format("Best",10));
 		dtLimits << New Column( "AXIS_HIGH", Numeric, Continuous, Format("Best",10));
 		dtLimits << New Column( "AXIS_INC", Numeric, Continuous, Format("Best",10));
-		dtLimits << New Column("AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
+		dtLimits << New Column( "AXIS_SCALE", Character, Nominal, <<Set Each Value("linear"));
 		dtLimits << New Column( "VALUE_INVERT", Numeric, Continuous, Format("Best",10));
-		groundrules=include("daveGroundRules.jsl",<<ParseOnly);
+		dtLimits << New Column( "MINOR_TICKS", Numeric, Continuous, Format("Best",10), Set Each Value(0));
+		dtLimits << New Column( "FORMAT", Character,Nominal, <<Set Each Value("Format(\!"Best\!",10)"));
+		groundrules=include(::scriptdir||"daveGroundRules.jsl",<<ParseOnly);
 		eval(groundrules);
-		Close(dtLimits,Save("saved_data/"||dataname||".LIMITS.jmp"));
+		Close(dtLimits,Save(::scriptdir||"saved_data/"||dataname||".LIMITS.jmp"));
 	);
 	
 	
@@ -149,6 +151,6 @@ downloadMeasData=Function( {dataname, getlimits, ground rules key},{Default Loca
 			Year Rule( "20xx" )
 		)
 	);
-	Close(keyname,Save("saved_data/WAT_Key.jmp"));
+	Close(keyname,Save(::scriptdir||"saved_data/WAT_Key.jmp"));
 	Write("Done fetching data.\!N");
 );

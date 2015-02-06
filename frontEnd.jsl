@@ -1,52 +1,204 @@
+// Use the local namespace
 Names Default To Here(1);
+
+// Close anything left open
 Close All(Reports);
+
+// Defaults
+splitsfile="splits\splits.xlsx";
 dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
-limpath="saved_data/"||dataname||".LIMITS.jmp";
-dtLimits=open(limpath,private);
-defdir=Get Default Directory();
-all params=column(dtLimits,"Parameter")<<Get Values;
-close(dtLimits,No Save);
 
-::front=Associative Array();
-::front["whichparams"]={};
+//We'll need the path of this directory later
+::scriptdir=Get Default Directory();
 
+// Opens the limits file and puts the correct parameter set into the parameter listbox
+// Also calls recount()
+update parambox=Function({},
+
+	// Location of limits file
+	limpath=::scriptdir||"saved_data/"||dataname||".LIMITS.jmp";
+	
+	// Try to open limits file and get parameter list.
+	Try(
+		dtLimits=open(limpath,private);
+		all params=column(dtLimits,"Parameter")<<Get Values;
+		close(dtLimits,No Save);
+		,
+		// But if it fails, just say parameter list is empty
+		Write("No limits file!\!N");
+		all params={};
+	);
+	
+	// Update the list box and recount
+	parambox<<set items(all params);
+	recount();
+);
+
+// Updates the count of how many params are selected
+recount=Function({},
+	numselbox<<Set Text(Char(Length(parambox<<get selected indices)));
+);
+
+// Most of the below is just GUI building, but I'll comment on the part that
+// is actually doing something...
 eval(eval expr(New Window("Launch JmpForJoy",
 	<<Show Toolbars(0),
 	<<Show Menu(0),
 	HListBox(
+		BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
+			VListBox(
+				TextBox("<b>Parameters</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				
+				// Listbox for the parameters
+				// Starts out empty, until the end of this chunk of GUI code.
+				// Will call recount() every time the selection is changed (manually)
+				parambox=ListBox({},width(175),nlines(12),recount()),
+				
+				// Button to clear the selection and recount
+				
+				ButtonBox("Clear Selection",parambox<<clear selection();recount();),
+				VListBox(
+					TextBox("Parameter Selection Regex:  "),
+					regexbox=TextEditBox("", <<Set Width(175)),
+					HListBox(
+						regexoptions=Radiobox({"Extend","Replace","Subset"}),
+						BorderBox(Left(20),
+						VListBox(Align(Right),
+							TextBox("Num Selected:"),
+							numselbox=TextBox("10000"),
+							
+							// Button to do the regex-based updating of parambox
+							ButtonBox("Regex Selection",
+								mode=regexoptions<<get selected();
+								pattern=regexbox<<get text();
+								items=parambox<< get items;
+								cur selection=parambox<< get selected indices;
+								
+								// Cycle through the items in the listbox
+								For(i=1,i<Length(items),i++,
+								
+									// True iff the regex matches the current item
+									doesmatch=Not(Is Missing(Regex(items[i],pattern)));
+									
+									// True iff the item is already selected
+									alreadysel=Contains(cur selection, i)>0;
+									
+									// "Extend" mode selects if matches or already selected
+									// "Replace" mode selects only if it matches
+									// "Subset" mode selects only if it matches and was already selected
+									parambox<<Set Selected(i,
+										((mode=="Extend")  &(doesmatch | alreadysel)) |
+										((mode=="Replace") &(doesmatch)) |
+										((mode=="Subset")  &(doesmatch & alreadysel))
+									);
+									
+								);
+								
+								// Make sure to update the count
+								recount();
+							),
+						))
+						
+					)
+				)
+		)),
 		VListBox(
-			parambox=ListBox(all params),
-			ButtonBox("Clear Selection",parambox<<clear selection())
-		),
-		VListBox(
-			HListBox(
-				TextBox("Splits file: "),
-				splitsbox=TextEditBox("splits\joey_splits.xlsx",<<Set Width(150)),
-			),
-			HListBox(
-				TextBox("Width: "),
-				widthbox=NumberEditBox(850,4),
-				TextBox("     Height: "),
-				heightbox=NumberEditBox(590,4)
-			),
-			HListBox(
-				TextBox("Track Lines:    "),
-				tracklinesbox=ComboBox({"None","Median","Mean"})
-			),
-			specialbox=CheckBox("Special Analysis"),
-			splitCEbox=CheckBox("Split Center/Edge"),
-			ButtonBox("Go",
-				whichparams=parambox<<get selected();
-				defaulttospecial=specialbox<<get();
-				defaulttoCE=splitCEbox<<get();
-				defaulttosliders=0;
-				splitsfile=splitsbox<<get text();
-				graphwidth=widthbox<<get();
-				graphheight=heightbox<<get();
-				tracklines=tracklinesbox<<get selected();
-				showlegend=0;
-				showreflines=1;
-				do download=0;
-				get limits=0;
-				Include(expr(defdir||"main.jsl"))))
-))));
+			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
+			VListBox(
+				TextBox("<b>Data sources</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				
+				// Inputs related to sources of data
+				HListBox(
+					VListBox(
+						BorderBox(Bottom(5),TextBox("Dataname: ")),
+						BorderBox(Bottom(5),TextBox("Splits file:   ")),
+						BorderBox(Bottom(5),TextBox("Wafermap: ")),
+						BorderBox(Bottom(5),TextBox("Groundrules: "))),
+					VListBox(
+						datanamebox=TextEditBox(dataname,<<Set Width(250)),
+						splitsbox=TextEditBox(splitsfile,<<Set Width(250)),
+						wafermapbox=TextEditBox(wafermap,<<Set Width(250)),
+						groundrulesbox=TextEditBox(groundrules,<<Set Width(250)))
+				),
+				HListBox(
+					BorderBox(Top(5),Right(35), getlimitsbox=CheckBox("Get limits as well")),
+					
+					// Button to download the data, and update parameter listing
+					ButtonBox("Download now",
+					
+						// Get sources from GUI
+						dataname=datanamebox<<get text();
+						splitsfile=splitsbox<<get text();
+						wafermap=wafermapbox<<get text();
+						groundrules=groundrulesbox<<get text();
+						get limits=getlimitsbox<<get();
+						
+						// Run downloadMeasData.jsl, and update the listing
+						include(::scriptdir||"downloadMeasData.jsl");
+						downloadMeasData(dataname, get limits, ground rules);
+						update parambox();
+					),
+					
+					// Button to update parambox without redownloading data
+					ButtonBox("Refresh listing",
+					
+						// Get sources from GUI
+						dataname=datanamebox<<get text();
+						
+						// And update the listing
+						update parambox();
+					)
+				)
+			)),
+			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),VListBox(
+				TextBox("<b>Graph Properties</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				
+				// Inputs related to the appearance of the graph
+				HListBox(
+					TextBox("Width: "),
+					widthbox=NumberEditBox(850,4),
+					TextBox("     Height: "),
+					heightbox=NumberEditBox(590,4)
+				),
+				HListBox(
+					TextBox("Track Lines:    "),
+					tracklinesbox=ComboBox({"None","Median","Mean"})
+				),
+				specialbox=CheckBox("Special Analysis"),
+				splitCEbox=CheckBox("Split Center/Edge"),
+				showlegendbox=CheckBox("Show Legend"),
+				reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
+				
+				// Button to run JmpForJoy!
+				ButtonBox("Generate Plot",
+				
+					// Get desires from GUI
+					whichparams=parambox<<get selected();
+					
+					splitsfile=splitsbox<<get text();
+					dataname=datanamebox<<get text();
+					wafermap=wafermapbox<<get text();
+					groundrules=groundrulesbox<<get text();
+					
+					defaulttospecial=specialbox<<get();
+					defaulttoCE=splitCEbox<<get();
+					graphwidth=widthbox<<get();
+					graphheight=heightbox<<get();
+					tracklines=tracklinesbox<<get selected();
+					showlegend=showlegendbox<<get();
+					showreflines=reflinesbox<<get();
+					defaulttosliders=0;
+					
+					// Don't download anything!
+					do download=0;
+					get limits=0;
+					
+					// Call main.jsl
+					Include(expr(::scriptdir||"main.jsl")))
+			)),
+					
+)))));
+
+
+// Fill the parameter listing based on the current inputs (defaults)
+update parambox();

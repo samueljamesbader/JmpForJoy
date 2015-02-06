@@ -72,7 +72,7 @@ generateSpecificTable=Function({run},{Default Local},
 			Split( :VALUE ),
 			Output Table( "Pre-Join Horizontal" ),
 			Remaining Columns( Keep(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD ) ),
-			Group(:WAT_FILE_KEY, :WAFER, :SITE),
+			Group(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD),
 			Private
 		);
 	Close(ptab,No Save);
@@ -138,7 +138,8 @@ generateSpecificTable=Function({run},{Default Local},
 			);
 			
 			// If the limits table says the data should be inverted
-			If (Column(dtLimits,"VALUE_INVERT")[r],
+			valinv=Column(dtLimits,"VALUE_INVERT")[r];
+			If (valinv,
 			
 				// Then flip the data in this column, and read in the spec limits flipped.
 				Column(phtab,param)<< Set Values(-1*(Column(phtab,param)<<Get Values));
@@ -157,6 +158,10 @@ generateSpecificTable=Function({run},{Default Local},
 			// If the data filter limits are invalid, set to missing.
 			If(lvl>=uvl, lvl=.;uvl=.);
 			
+			// Read in the extra axis details
+			mt= Column(dtLimits,"MINOR_TICKS")[r];
+			format= Column(dtLimits,"FORMAT")[r];
+			
 			// Put all of the above into the dictionary for this parameter
 			::rundicts[run]["pdict"][param]["LSL"]=lsl;
 			::rundicts[run]["pdict"][param]["USL"]=usl;
@@ -166,6 +171,9 @@ generateSpecificTable=Function({run},{Default Local},
 			::rundicts[run]["pdict"][param]["SCALE"]=scale;
 			::rundicts[run]["pdict"][param]["LVL"]=lvl;
 			::rundicts[run]["pdict"][param]["UVL"]=uvl;
+			::rundicts[run]["pdict"][param]["MT"]=mt;
+			::rundicts[run]["pdict"][param]["FORMAT"]=format;
+			::rundicts[run]["pdict"][param]["VALINV"]=valinv;
 			
 			// Also record the row number so we remember where to save the limits later
 			::rundicts[run]["pdict"][param]["row"]=r;
