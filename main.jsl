@@ -1,50 +1,9 @@
 // Use the local namespace
 Names Default To Here(1);
 
-Write(whichparams);
-
-// Later, we'll want the JmpForJoy directory
-::scriptdir=Get Default Directory();
-
-// Store run-specific globals for each run in rundicts
-If(Is Empty(::rundicts),
-	::rundicts={};
-);
-
-// Make a rundicts entry for this run
-run=N Items(::rundicts)+1;
-::rundicts[run]=Associative Array();
-
-// Load it up with values from the run_template
-::rundicts[run]["whichparams"]=whichparams;
-::rundicts[run]["dataname"]=dataname;
-::rundicts[run]["wafermap"]=wafermap;
-::rundicts[run]["specialanalysis"]=defaulttospecial;
-::rundicts[run]["centeredge"]=defaulttoCE;
-::rundicts[run]["defaulttosliders"]=defaulttosliders;
-::rundicts[run]["splitsfile"]=splitsfile;
-::rundicts[run]["tracklines"]=tracklines;
-::rundicts[run]["graphsize"]=eval expr(Size(expr(graphwidth),expr(graphheight)));
-::rundicts[run]["showlegend"]=showlegend;
-::rundicts[run]["showreflines"]=showreflines;
-
-// Create a parameter dictionary within this run.
-// This will hold the parameter-specific information for each parameter
-::rundicts[run]["pdict"]=Associative Array();
-
-// Start us off
-Write("Launching Run "||Char(run)||"\!N");
-
-// Download if necessary
-if (do download,
-	include("downloadMeasData.jsl");
-	downloadMeasData(dataname, get limits, ground rules);
-);
-
 // Generate horizontal table
-include("generateSpecificTable.jsl");
-generateSpecificTable(run);
+include("prepToPlot.jsl");
 
 // Generate the actual report
 include("generateVariabilityReport.jsl");
-generateVariabilityReport(run);
+generateVariabilityReport(N Items(::rundicts));

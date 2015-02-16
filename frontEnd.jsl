@@ -39,6 +39,7 @@ recount=Function({},
 	numselbox<<Set Text(Char(Length(parambox<<get selected indices)));
 );
 
+
 // Most of the below is just GUI building, but I'll comment on the part that
 // is actually doing something...
 eval(eval expr(New Window("Launch JmpForJoy",
@@ -170,32 +171,64 @@ eval(eval expr(New Window("Launch JmpForJoy",
 				reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
 				
 				// Button to run JmpForJoy!
-				ButtonBox("Generate Plot",
+				HListBox(
+					ButtonBox("Generate Plot",
 				
-					// Get desires from GUI
-					whichparams=parambox<<get selected();
+						// Get desires from GUI
+						whichparams=parambox<<get selected();
+						
+						splitsfile=splitsbox<<get text();
+						dataname=datanamebox<<get text();
+						wafermap=wafermapbox<<get text();
+						groundrules=groundrulesbox<<get text();
+						
+						defaulttospecial=specialbox<<get();
+						defaulttoCE=splitCEbox<<get();
+						graphwidth=widthbox<<get();
+						graphheight=heightbox<<get();
+						tracklines=tracklinesbox<<get selected();
+						showlegend=showlegendbox<<get();
+						showreflines=reflinesbox<<get();
+						defaulttosliders=0;
+						
+						// Don't download anything!
+						do download=0;
+						get limits=0;
+						
+						// Call main script
+						Include(expr(::scriptdir||"prepToPlot.jsl"));
+						Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
+						generateVariabilityReport(N Items(::rundicts));
+					),
+					ButtonBox("Failuremap",
 					
-					splitsfile=splitsbox<<get text();
-					dataname=datanamebox<<get text();
-					wafermap=wafermapbox<<get text();
-					groundrules=groundrulesbox<<get text();
-					
-					defaulttospecial=specialbox<<get();
-					defaulttoCE=splitCEbox<<get();
-					graphwidth=widthbox<<get();
-					graphheight=heightbox<<get();
-					tracklines=tracklinesbox<<get selected();
-					showlegend=showlegendbox<<get();
-					showreflines=reflinesbox<<get();
-					defaulttosliders=0;
-					
-					// Don't download anything!
-					do download=0;
-					get limits=0;
-					
-					// Call main.jsl
-					Include(expr(::scriptdir||"main.jsl")))
-			)),
+						// Get desires from GUI
+						whichparams=parambox<<get selected();
+						
+						splitsfile=splitsbox<<get text();
+						dataname=datanamebox<<get text();
+						wafermap=wafermapbox<<get text();
+						groundrules=groundrulesbox<<get text();
+						
+						defaulttospecial=specialbox<<get();
+						defaulttoCE=splitCEbox<<get();
+						graphwidth=widthbox<<get();
+						graphheight=heightbox<<get();
+						tracklines=tracklinesbox<<get selected();
+						showlegend=showlegendbox<<get();
+						showreflines=reflinesbox<<get();
+						defaulttosliders=0;
+						
+						// Don't download anything!
+						do download=0;
+						get limits=0;
+						
+						// Call main script
+						Include(expr(::scriptdir||"prepToPlot.jsl"));
+						Include(expr(::scriptdir||"generateFailureWafermap.jsl"));
+						generateFailureWafermap(N Items(::rundicts));
+					)
+				))),
 					
 )))));
 

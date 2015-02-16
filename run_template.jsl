@@ -63,7 +63,7 @@ showreflines=1;
 //////
 
 // To look at Bipolar WAT M3:
-//dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at MOS WAT:
 //dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
 // To look at Keithley:
@@ -74,7 +74,9 @@ showreflines=1;
 //dataname="018A3P6M3318XF4C_eagle_pc17_map_with_beta.in";wafermap="pc17_Keithley";groundrules="Keithley";
 
 // Dave?:  http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/018A3P6M3318XF4C_DTMFN21_Final.LIM.txt.JSL
-dataname="018A3P6M3318XF4C_DTMFN21_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
+//dataname="018A3P6M3318XF4C_DTMFN21_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
 
 // Run JmpForJoy with the above settings.
-include("main.jsl");
+Include("prepToPlot.jsl");
+Include("generateVariabilityReport.jsl");
+generateVariabilityReport(N Items(::rundicts));
