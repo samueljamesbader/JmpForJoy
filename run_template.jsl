@@ -7,19 +7,7 @@ Names Default To Here(1);
 
 // If you know which paramters you want to inspect, you can list them here
 // This will skip the parameter selection pop-up.
-whichparams={"AN041_IB_0.5_2"};
-whichparams={};
-whichparams={
-	//"N02X50_CBO_1uA",//"N02X50_CEO_.8V","N02X50_CES_1uA","N02X50_HFE_0.8V","N02X50_IC_0.8V","N02X50_VAF_.7V",
-	"NHSX50_CBO_1uA"//,"NHSX50_CEO_.8V","NHSX50_CES_1uA","NHSX50_HFE_0.8V","NHSX50_IC_0.8V","NHSX50_VAF_.7V"//,
-	//"NHVX50_CBO_1uA","NHVX50_CEO_.8V","NHVX50_CES_1uA","NHVX50_HFE_0.8V","NHVX50_IC_0.8V","NHVX50_VAF_.7V",
-	//"NLVX50_CBO_1uA","NLVX50_CEO_.8V","NLVX50_CES_1uA","NLVX50_HFE_0.8V","NLVX50_IC_0.8V","NLVX50_VAF_.7V"
-};
-
-// Compare D80828.04 around value=20 for these three
-whichparams={"NHSX50_CBO_1uA"};
-//whichparams={"NHSX50_CBO_1uA","N02X50_CBO_1uA"};
-//whichparams={"N02X50_CBO_1uA","NHSX50_CBO_1uA"};
+whichparams={"VT_N1_N_V","VTB_N1_N_V"};
 
 // 1 iff you want to select the specific X-variables for the plot ("special analysis"),
 // eg if you want to plot results against process splits.
@@ -46,7 +34,7 @@ tracklines="Median";
 tracklines="None";
 
 // Path to an Excel file of splits you want to use.
-splitsfile="splits\splits_n_sub_collector.xlsx";
+splitsfile="splits\splits.xlsx";
 
 // Desired graph size
 graphwidth=850;
@@ -59,22 +47,19 @@ showlegend=1;
 showreflines=1;
 
 //////
-///  Specify which dataset to analyze by uncommenting (only) the appropriate line
+///  Specify the dataset query
 //////
+source="FinalWAT";
+project="Falcon-pc17";
+lot="";
+date="";
 
-// To look at Bipolar WAT M3:
-dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
-// To look at MOS WAT:
-//dataname="018A3P6M3318XF4C_TMFN21C_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
-// To look at Keithley:
-//dataname="018A3P6M3318XF4C_falcon_pc17_map7.in";wafermap="pc17_Keithley";groundrules="Keithley";
-// To look at Eagle pc17
-//dataname="018A3P6M3318XF4C_eagle_pc17_map.in";wafermap="pc17_Keithley";groundrules="Keithley";
-// To look at Eagle pc17 with beta
-//dataname="018A3P6M3318XF4C_eagle_pc17_map_with_beta.in";wafermap="pc17_Keithley";groundrules="Keithley";
-
-// Dave?:  http://wil4dyld1.mpd.analog.com/WAT/DEVELOPMENT_WAT/018A3P6M3318XF4C_DTMFN21_Final.LIM.txt.JSL
-//dataname="018A3P6M3318XF4C_DTMFN21_Final.LIM";wafermap="pc17_WAT";groundrules="WAT";
+//////
+/// What additional information do we have about this data
+//////
+limitstable="FinalWAT_Falcon-pc17";
+wafermap="pc17_WAT";
+groundrules="WAT";
 
 // Run JmpForJoy with the above settings.
 Include("prepToPlot.jsl");

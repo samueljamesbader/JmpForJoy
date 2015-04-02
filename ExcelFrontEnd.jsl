@@ -16,6 +16,7 @@ dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT"
 update parambox=Function({},
 
 	// Location of limits file
+	Write("GETTING BAD LIMITS!!!!!!!!\!N");
 	limpath=::scriptdir||"saved_data/"||dataname||".LIMITS.jmp";
 	
 	// Try to open limits file and get parameter list.

@@ -414,7 +414,7 @@ Save Param=Function({run,param},{Default Local},
 	pd=::rundicts[run]["pdict"][param];
 	
 	// Ensure that dtLimits is open, and write in all our data
-	dtLimits=Open(::scriptdir||::rundicts[run]["dtLimits path"],Private);
+	dtLimits=Open(::rundicts[run]["dtLimits path"],Private);
 	r=pd["row"];
 	Column(dtLimits,"AXIS_SCALE")[r]=pd["SCALE"];
 	Column(dtLimits,"AXIS_LOW")[r]=pd["LAL"];

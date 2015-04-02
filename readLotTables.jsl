@@ -2,17 +2,15 @@
 Names Default To Here(1);
 
 // Generates a horizontal data table for select parameters from which the variability report can be generated.
-generateSpecificTable=Function({run},{Default Local},
-
-	// Where to find the data and limits
-	fulldatapath="saved_data/"||dataname||".jmp";
-	limpath="saved_data/"||dataname||".LIMITS.jmp";
+ReadLotTables=Function({run},{Default Local},
 	
-	// Open the full data and limits, keeping the tables private (unaccessible)
+	// Open the limits table, keeping it private (unaccessible)
 	// In fact, all tables opened in this script will be private except the final
 	// one used in drawing the report.
-	fulltab=Open(fulldatapath,Private);
-	dtLimits=Open(limpath,Private);
+	// Also, save the path to limits for later.
+	::rundicts[run]["dtLimits path"]=
+		::limsource||::rundicts[run]["limitstable"]||".limits.jmp";
+	dtLimits=Open(::rundicts[run]["dtLimits path"],Private);
 	
 	// If whichparams is empty, show a pop-up to determine what to analyze
 	If(not(N Items(::rundicts[run]["whichparams"])),
@@ -54,28 +52,41 @@ generateSpecificTable=Function({run},{Default Local},
 		Stop();
 	);
 	
-	// Make a table with only the intended parameter,
-	// by selecting only rows where the parameter value is in whichparams,
-	// then using the subset command.
-	// Then close the full table.
-	Write("Generating horizontal data for specific parameters...\!N");
-	fulltab<<select where(contains(whichparams,:PARAMETER));
-	ptab=fulltab<<subset(selected rows(1),selected columns(0),Private);
-	Close(fulltab,No Save);
-
-	// Split :VALUE by :PARAMETER into a new table.
-	// ie the distinct :PARAMETER names become columns containing the entries from :VALUE
-	// Then close the previously made table.
-	phtab=ptab<<
-		Split(
-			Split By( :PARAMETER ),
-			Split( :VALUE ),
-			Output Table( "Pre-Join Horizontal" ),
-			Remaining Columns( Keep(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD ) ),
-			Group(:WAT_FILE_KEY, :WAFER, :SITE, :XCOORD, :YCOORD),
-			Private
+	
+	
+	// List all the files in the clean source folder
+	pattern="("||source||")_("||project||")_("||lot||")_("||date||").jmp";
+	all files=Files in Directory(::cleansource);
+	
+	// Pick out only the relevant ones for our query
+	For(f=1,f<=Length(all files),f++,
+		mo=Regex Match(all files[f],pattern);
+		If(Length(mo),
+		
+			// Open the table and take just the necessary columns
+			cur dt=Open(::cleansource||mo[1],Private);
+			column(cur dt,"WAFER") << Set Selected(1);
+			column(cur dt,"XCOORD") << Set Selected(1);
+			column(cur dt,"YCOORD") << Set Selected(1);
+			For(p=1,p<=Length(whichparams),p++,
+				Column(cur dt,whichparams[p])<<Set Selected(1));
+			subs=cur dt << Subset(Selected Columns,Private);
+			
+			// Add and fill a LOT column and a DATE column and a PCM_SPEC column
+			subs<<new column("PCM_SPEC",Character,<<Set Each Value(mo[3]));
+			subs<<new column("LOT_ID",Character,<<Set Each Value(mo[4]));
+			subs<<new column("DATE",Character,<<Set Each Value(mo[5]));
+			Close(cur dt, No Save);
+			
+			// Concatenate into one vertical table ("dt") for the entire query
+			If(Is Empty(dt),
+				dt=subs;
+				,				
+				dt<<Concatenate(subs,Append To First Table);
+				Close(subs,NoSave);
+			);
 		);
-	Close(ptab,No Save);
+	);
 
 	// Gather the limits from the limits table into rundicts.
 	// (This is also where we do the value invert if necessary.)
@@ -102,10 +113,10 @@ generateSpecificTable=Function({run},{Default Local},
 			
 				// Create an invisible statistics table for this parameter's data
 				eval(eval expr(
-					t=phtab<<Tabulate(
+					t=dt<<Tabulate(
 						Show Control Panel( 0 ),
 						Add Table(
-							Column Table( Analysis Columns( expr(column(phtab,param) ) ) ),
+							Column Table( Analysis Columns( expr(column(dt,param) ) ) ),
 							Row Table( Statistics( Median, Interquartile Range, Min ) )
 						),
 						<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
@@ -142,7 +153,7 @@ generateSpecificTable=Function({run},{Default Local},
 			If (valinv,
 			
 				// Then flip the data in this column, and read in the spec limits flipped.
-				Column(phtab,param)<< Set Values(-1*(Column(phtab,param)<<Get Values));
+				Column(dt,param)<< Set Values(-1*(Column(dt,param)<<Get Values));
 				lsl = -Column( dtLimits, "SPEC_HIGH" )[r];
 				usl = -Column( dtLimits, "SPEC_LOW" )[r];
 				,
@@ -179,24 +190,6 @@ generateSpecificTable=Function({run},{Default Local},
 			::rundicts[run]["pdict"][param]["row"]=r;
 		);
 	);
-
-	// Add in lot-related info which is stored separately in the WAT Key data table,
-	// by joining that table with ours, where the :WAT_FILE_KEY column is used to
-	// index the join.
-	// Then close the previous, lotdata-less, table and the WAT Key data table.
-	Write("Adding WAT Key data\!N");
-	dtWAT=Open("saved_data/WAT_Key.jmp",Private);
-	htabwat=dtWAT << Join(
-		With( phtab ),
-		By Matching Columns( :WAT_FILE_KEY = :WAT_FILE_KEY ),
-		Drop multiples( 0, 0 ),
-		Name( "Include non-matches" )(0, 0),
-		Preserve main table order( 1 ),
-		Output Table Name("Horizontal, Run" || Char(run) )//,
-		//Invisible
-	);
-	Close(dtWAT, No Save);
-	Close(phtab, No Save);
 	
 	// Open the Excel file of splits if it exists
 	splits file=::rundicts[run]["splitsfile"];
@@ -240,7 +233,7 @@ generateSpecificTable=Function({run},{Default Local},
 			Column(splittab,"Wafer")<<Set Name("WAFER");
 			splittab<<Delete Column(Base Lot);
 			//Stop();
-			htab=htabwat << Join(
+			fulltab=dt << Join(
 					With(splittab),
 					By Matching Columns(:LOT_ID = :LOT_ID, :WAFER = :WAFER),
 					Merge Same Name Columns,
@@ -250,25 +243,25 @@ generateSpecificTable=Function({run},{Default Local},
 					Output Table Name("Joined Horizontal, Run" || Char(run) ),
 					Invisible
 			);
-			Close(htabwat, No Save);
+			Close(dt, No Save);
 			Close(splittab, No Save);
 		);
 		,
 		// Otherwise, if not splits file found, inform the user.
 		Write("Didn't find splits file.  Proceeding without.\!N");
-		htab=htabwat;
-		htab<<Set Name("Joined Horizontal, Run" || Char(run) );
+		fulltab=dt;
+		fulltab<<Set Name("Joined Horizontal, Run" || Char(run) );
 	);
 	
 	// We're about to make a bunch of tweaks to the table, so let's warn JMP
 	// not to do any intermediate processing (like evaluating formulas)
 	// on this table until we're finished!
-	htab << Begin Data Update;
+	fulltab << Begin Data Update;
 	
 	// Create a character column by concatenating the coordinates.
 	// This column will be used in a look-up to determine whether we are center or edge,
 	// and will be the "Shape Name Use" column if we want to plot on a wafer map.
-	eval(eval expr(htab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)),
+	eval(eval expr(fulltab << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)),
 		Set Property(
 			"Map Role", Map Role(Shape Name Use(
 				expr(::scriptdir || "wafermaps\" || wafermap || "-Name.jmp"),
@@ -282,13 +275,13 @@ generateSpecificTable=Function({run},{Default Local},
 	
 	// Make a new column which just states "center" or "edge" based on the previous column
 	eval( eval expr(
-		htab<< New Column("ColorMap", Character, Nominal,
+		fulltab<< New Column("ColorMap", Character, Nominal,
 			Formula(if(expr(ce map)[:Coord_CAT],"Edge","Center")))));
 	
 	// Use that new column to color the rows
-	(htab << Select Where( :ColorMap == "Center"))<<Colors("Red");
-	(htab << Select Where( :ColorMap == "Edge"))<<Colors("Blue");
-	htab << Clear Select;
+	(fulltab << Select Where( :ColorMap == "Center"))<<Colors("Red");
+	(fulltab << Select Where( :ColorMap == "Edge"))<<Colors("Blue");
+	fulltab << Clear Select;
 	
 	// For each parameter
 	For( p=1, p<=N Items(whichparams),p+=1,
@@ -296,14 +289,14 @@ generateSpecificTable=Function({run},{Default Local},
 		
 		// Create a copy of the parameter column that only has values for center sites
 		center formula = eval expr( if(:ColorMap=="Center",ascolumn(expr(colname)),.));
-		htab << New column(
+		fulltab << New column(
 			colname||" center";,
 			Formula(nameexpr(center formula))
 		);
 		
 		// Create a copy of the parameter column that only has values for edge sites
 		edge formula = eval expr( if(:ColorMap=="Edge",ascolumn(expr(colname)),.));
-		htab << New column(
+		fulltab << New column(
 			colname||" edge",
 			Formula(nameexpr(edge formula))
 		);
@@ -318,7 +311,7 @@ generateSpecificTable=Function({run},{Default Local},
 				
 		// The failbool column: boolean formula, 1 if failure
 		failbool_colname=colname||"_FAILBOOL";
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failbool_colname,
 			Formula(
 				( ascolumn(expr(colname)) < ::rundicts[expr(run)]["pdict"][expr(colname)]["LSL"])
@@ -328,13 +321,13 @@ generateSpecificTable=Function({run},{Default Local},
 		)));
 		
 		// failbool, but only for centers
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failbool_colname||" center",
 			Formula(if(:ColorMap=="Center",ascolumn(expr(failbool_colname)),.))
 		)));
 		
 		// failbool, but only for edges
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failbool_colname||" edge",
 			Formula(if(:ColorMap=="Edge",ascolumn(expr(failbool_colname)),.))
 		)));
@@ -343,19 +336,19 @@ generateSpecificTable=Function({run},{Default Local},
 		// failure proportion formula calculated by averaging the boolean column
 		// over rows that have the same wafer, lot_id, and pcm_spec.
 		failpct_colname=colname||"_FAILPCT";
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failpct_colname,
 			Formula(col mean(ascolumn(expr(failbool_colname)),:WAFER, :LOT_ID, :PCM_SPEC))
 		)));
 		
 		// failpct, but only for centers
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failpct_colname||" center",
 			Formula(col mean(ascolumn(expr(failbool_colname||" center")),:WAFER, :LOT_ID, :PCM_SPEC))
 		)));
 		
 		// failpct, but only for edges
-		eval(eval expr(htab << New Column(
+		eval(eval expr(fulltab << New Column(
 			failpct_colname||" edge",
 			Formula(col mean(ascolumn(expr(failbool_colname||" edge")),:WAFER, :LOT_ID, :PCM_SPEC))
 		)));
@@ -363,24 +356,18 @@ generateSpecificTable=Function({run},{Default Local},
 	
 	// Create a NUMERIC date column by parsing the preexisting character Date column
 	// So that the lots can be ordered by this numeric value on the x-axis
-	htab << New Column("numeric date", Numeric, Continuous, Format("Best", 12),
-		Formula(Parse Date(:DATE, "YYYY-MM-DD")));
+	fulltab << New Column("numeric date", Numeric, Continuous, Format("Best", 12),
+		Formula(Parse Date(:DATE, "m/d/y")));
 	
 	// Run those formulas now
 	// And let JMP know we're done tweaking the table
-	htab << RunFormulas();
-	htab << End Data Update;
+	fulltab << RunFormulas();
+	fulltab << End Data Update;
 	
 	// Store references to these tables in rundicts for later
-	::rundicts[run]["htab"]=htab;
+	::rundicts[run]["htab"]=fulltab;
 	::rundicts[run]["dtLimits"]=dtLimits;
-	
-	// Also store the path to the limits table in case we need to re-open it later
-	// (Why? Because every run keeps a reference to dtLimits, but each run will close
-	// dtLimits when the variability report is closed, so it's possible that another
-	// run will close dtLimits, making this run need to reopen it.)
-	::rundicts[run]["dtLimits path"]=limpath;
-	
+			
 	// All done!
 	Write("Done generating horizontal table.\!N");
 );

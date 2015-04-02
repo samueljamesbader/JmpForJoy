@@ -5,6 +5,8 @@ Write(whichparams);
 
 // Later, we'll want the JmpForJoy directory
 ::scriptdir=Get Default Directory();
+::cleansource="C:\\Users\\SBADER\\Desktop\\JMP_Project\\straight_import\\CleanData\\";
+::limsource="C:\\Users\\SBADER\\Desktop\\JMP_Project\\straight_import\\Limits\\";
 
 // Store run-specific globals for each run in rundicts
 If(Is Empty(::rundicts),
@@ -14,10 +16,20 @@ If(Is Empty(::rundicts),
 // Make a rundicts entry for this run
 run=N Items(::rundicts)+1;
 ::rundicts[run]=Associative Array();
-Write("HI\!N");
+
+// Defaults for query
+If(source=="",source=".*");
+If(project=="",project=".*");
+If(lot=="",lot=".*");
+If(date=="",date=".*");
+
 // Load it up with values from the run_template
 ::rundicts[run]["whichparams"]=whichparams;
-::rundicts[run]["dataname"]=dataname;
+::rundicts[run]["source"]=source;
+::rundicts[run]["project"]=project;
+::rundicts[run]["lot"]=lot;
+::rundicts[run]["date"]=date;
+::rundicts[run]["limitstable"]=limitstable;
 ::rundicts[run]["wafermap"]=wafermap;
 ::rundicts[run]["specialanalysis"]=defaulttospecial;
 ::rundicts[run]["centeredge"]=defaulttoCE;
@@ -42,5 +54,5 @@ if (do download,
 );
 
 // Generate horizontal table
-include("generateSpecificTable.jsl");
-generateSpecificTable(run);
+include("readLotTables.jsl");
+ReadLotTables(run);
