@@ -1,25 +1,52 @@
+/////
+// Program boilerplate
+/////
+
 // Use the local namespace
 Names Default To Here(1);
 
 // Close anything left open
 Close All(Reports);
 
-// Defaults
-splitsfile="splits\splits.xlsx";
-dataname="018A3P6M3318XF4C_TMFN21B_M3.LIM";wafermap="pc17_WAT";groundrules="WAT";
+/////
+// Globals
+/////
 
-//We'll need the path of this directory later
+// Global directory locations
 ::scriptdir=Get Default Directory();
+::cleansource="C:\\Users\\SBADER\\Desktop\\JMP_Project\\straight_import\\CleanData\\";
+::limsource="C:\\Users\\SBADER\\Desktop\\JMP_Project\\straight_import\\Limits\\";
 
-// Opens the limits file and puts the correct parameter set into the parameter listbox
-// Also calls recount()
-update parambox=Function({},
+// Store run-specific globals for each run in rundicts
+If(Is Empty(::rundicts),
+	::rundicts={};
+);
+
+// Store query-specific globals in the querydict
+If(Is Empty(::querydict),
+	::querydict=Associative Array();
+);
+
+/////
+// Prep to create the graphical front-end (set defaults, define utility functions)
+/////
+
+// Defaults
+::querydict["source"]="FinalWAT";
+::querydict["project"]="Falcon-pc17";
+::querydict["lot"]=".*";
+::querydict["splits"]="splits\splits.xlsx";
+::querydict["wafermap"]="pc17_WAT";
+::querydict["limits"]="FinalWAT_Falcon-pc17";
+
+// Update ParamBox:
+// Reads the limits file to put the correct parameter set into the parameter listbox
+Update ParamBox=Function({},
 
 	// Location of limits file
-	Write("GETTING BAD LIMITS!!!!!!!!\!N");
-	limpath=::scriptdir||"saved_data/"||dataname||".LIMITS.jmp";
+	limpath=::limsource||::querydict["limits"]||".limits.jmp";
 	
-	// Try to open limits file and get parameter list.
+	// Try to open the limits file and get parameter list.
 	Try(
 		dtLimits=open(limpath,private);
 		all params=column(dtLimits,"Parameter")<<Get Values;
@@ -40,6 +67,13 @@ recount=Function({},
 	numselbox<<Set Text(Char(Length(parambox<<get selected indices)));
 );
 
+Update Plot Parambox=Function({},
+	plotparambox<<set items(::querydict["whichparams"]);
+);
+
+/////
+// Create the graphical front-end
+/////
 
 // Most of the below is just GUI building, but I'll comment on the part that
 // is actually doing something...
@@ -49,26 +83,36 @@ eval(eval expr(New Window("Launch JmpForJoy",
 	HListBox(
 		BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
 			VListBox(
-				TextBox("<b>Parameters</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				TextBox("<b>Parameters to query</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+								
+				HListBox(BorderBox(Bottom(5),TextBox("Limits table: ")),
+						limbox=TextEditBox(::querydict["limits"],<<Set Width(150))),
+						
+				// Button to update parambox without redownloading data
+				ButtonBox("Refresh parameter list from table",
 				
+					// Get sources from GUI
+					::querydict["limits"]=limbox<<get text();
+					
+					// And update the listing
+					update parambox();
+				),		
+								
 				// Listbox for the parameters
 				// Starts out empty, until the end of this chunk of GUI code.
-				// Will call recount() every time the selection is changed (manually)
-				parambox=ListBox({},width(175),nlines(12),recount()),
+				// box will call recount() every time the selection is manually changed
+				parambox=ListBox({},width(225),nlines(12),recount()),
 				
-				// Button to clear the selection and recount
-				
-				ButtonBox("Clear Selection",parambox<<clear selection();recount();),
 				VListBox(
 					TextBox("Parameter Selection Regex:  "),
-					regexbox=TextEditBox("", <<Set Width(175)),
+					regexbox=TextEditBox("", <<Set Width(225)),
 					HListBox(
-						regexoptions=Radiobox({"Extend","Replace","Subset"}),
-						BorderBox(Left(20),
+						BorderBox(Top(7),
+						regexoptions=Radiobox({"Extend","Replace","Subset"})),
+						BorderBox(Left(70),
 						VListBox(Align(Right),
-							TextBox("Num Selected:"),
-							numselbox=TextBox("10000"),
-							
+							HListBox(TextBox("Num Selected:"),
+							numselbox=TextBox("10000")),
 							// Button to do the regex-based updating of parambox
 							ButtonBox("Regex Selection",
 								mode=regexoptions<<get selected();
@@ -99,6 +143,8 @@ eval(eval expr(New Window("Launch JmpForJoy",
 								// Make sure to update the count
 								recount();
 							),
+							// Button to clear the selection and recount
+							ButtonBox("Clear Selection",parambox<<clear selection();recount();),
 						))
 						
 					)
@@ -107,132 +153,127 @@ eval(eval expr(New Window("Launch JmpForJoy",
 		VListBox(
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
 			VListBox(
-				TextBox("<b>Data sources</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				TextBox("<b>Data source to query</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
 				
 				// Inputs related to sources of data
 				HListBox(
 					VListBox(
-						BorderBox(Bottom(5),TextBox("Dataname: ")),
+						BorderBox(Bottom(5),TextBox("Source Type: ")),
+						BorderBox(Bottom(5),TextBox("Project: ")),
+						BorderBox(Bottom(5),TextBox("Lot: ")),
 						BorderBox(Bottom(5),TextBox("Splits file:   ")),
-						BorderBox(Bottom(5),TextBox("Wafermap: ")),
-						BorderBox(Bottom(5),TextBox("Groundrules: "))),
+						BorderBox(Bottom(5),TextBox("Wafermap: "))),
 					VListBox(
-						datanamebox=TextEditBox(dataname,<<Set Width(250)),
-						splitsbox=TextEditBox(splitsfile,<<Set Width(250)),
-						wafermapbox=TextEditBox(wafermap,<<Set Width(250)),
-						groundrulesbox=TextEditBox(groundrules,<<Set Width(250)))
+						sourcebox=TextEditBox(::querydict["source"],<<Set Width(250)),
+						projectbox=TextEditBox(::querydict["project"],<<Set Width(250)),
+						lotbox=TextEditBox(::querydict["lot"],<<Set Width(250)),
+						splitsbox=TextEditBox(::querydict["splits"],<<Set Width(250)),
+						wafermapbox=TextEditBox(::querydict["wafermap"],<<Set Width(250)))
 				),
 				HListBox(
-					BorderBox(Top(5),Right(35), getlimitsbox=CheckBox("Get limits as well")),
-					
-					// Button to download the data, and update parameter listing
-					ButtonBox("Download now",
+					// Button to run the query, and update parameter listing
+					ButtonBox("Run Lot Query",
 					
 						// Get sources from GUI
-						dataname=datanamebox<<get text();
-						splitsfile=splitsbox<<get text();
-						wafermap=wafermapbox<<get text();
-						groundrules=groundrulesbox<<get text();
-						get limits=getlimitsbox<<get();
+						::querydict["source"]=sourcebox<<get text();
+						::querydict["project"]=projectbox<<get text();
+						::querydict["lot"]=lotbox<<get text();
+						::querydict["date"]=".*";
+						::querydict["limitstable"]=limbox<<get text();
+						::querydict["splitsfile"]=splitsbox<<get text();
+						::querydict["wafermap"]=wafermapbox<<get text();
+						::querydict["whichparams"]=parambox<<get selected();
 						
-						// Run downloadMeasData.jsl, and update the listing
-						include(::scriptdir||"downloadMeasData.jsl");
-						downloadMeasData(dataname, get limits, ground rules);
-						update parambox();
-					),
-					
-					// Button to update parambox without redownloading data
-					ButtonBox("Refresh listing",
-					
-						// Get sources from GUI
-						dataname=datanamebox<<get text();
-						
-						// And update the listing
-						update parambox();
+						// Run the query
+						include(::scriptdir||"developQuery.jsl");
+						developQuery();
+						Update Plot ParamBox();
 					)
+					
 				)
 			)),
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),VListBox(
-				TextBox("<b>Graph Properties</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
-				
-				// Inputs related to the appearance of the graph
-				HListBox(
-					TextBox("Width: "),
-					widthbox=NumberEditBox(850,4),
-					TextBox("     Height: "),
-					heightbox=NumberEditBox(590,4)
-				),
-				HListBox(
-					TextBox("Track Lines:    "),
-					tracklinesbox=ComboBox({"None","Median","Mean"})
-				),
-				specialbox=CheckBox("Special Analysis"),
-				splitCEbox=CheckBox("Split Center/Edge"),
-				showlegendbox=CheckBox("Show Legend"),
-				reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
-				
-				// Button to run JmpForJoy!
-				HListBox(
-					ButtonBox("Generate Plot",
-				
-						// Get desires from GUI
-						whichparams=parambox<<get selected();
-						
-						splitsfile=splitsbox<<get text();
-						dataname=datanamebox<<get text();
-						wafermap=wafermapbox<<get text();
-						groundrules=groundrulesbox<<get text();
-						
-						defaulttospecial=specialbox<<get();
-						defaulttoCE=splitCEbox<<get();
-						graphwidth=widthbox<<get();
-						graphheight=heightbox<<get();
-						tracklines=tracklinesbox<<get selected();
-						showlegend=showlegendbox<<get();
-						showreflines=reflinesbox<<get();
-						defaulttosliders=0;
-						
-						// Don't download anything!
-						do download=0;
-						get limits=0;
-						
-						// Call main script
-						Include(expr(::scriptdir||"prepToPlot.jsl"));
-						Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
-						generateVariabilityReport(N Items(::rundicts));
+				TextBox("<b>Properties for a Quick Plot</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				HListBox(VListBox(
+					// Inputs related to the appearance of the graph
+					HListBox(
+						TextBox("Width: "),
+						widthbox=NumberEditBox(850,4),
+						TextBox("     Height: "),
+						heightbox=NumberEditBox(590,4)
 					),
-					ButtonBox("Failuremap",
+					HListBox(
+						TextBox("Track Lines:    "),
+						tracklinesbox=ComboBox({"None","Median","Mean"})
+					),
+					specialbox=CheckBox("Special Analysis"),
+					splitCEbox=CheckBox("Split Center/Edge"),
+					showlegendbox=CheckBox("Show Legend"),
+					reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
 					
-						// Get desires from GUI
-						whichparams=parambox<<get selected();
+					// Button to run JmpForJoy!
+					HListBox(
+						ButtonBox("Generate Plot",
+					
+							run=N Items(::rundicts)+1;
+							::rundicts[run]=AssociativeArray();
+							
+							// Get desires from GUI
+							::rundicts[run]["whichparams"]=plotparambox<<get selected();
+							::rundicts[run]["pdict"]=Associative Array();
+							::rundicts[run]["specialanalysis"]=specialbox<<get();
+							::rundicts[run]["centeredge"]=splitCEbox<<get();
+							width=widthbox<<get();height=heightbox<<get();
+							::rundicts[run]["graphsize"]=eval expr(Size(name expr(width),name expr(height)));
+							::rundicts[run]["tracklines"]=tracklinesbox<<get selected();
+							::rundicts[run]["showlegend"]=showlegendbox<<get();
+							::rundicts[run]["showreflines"]=reflinesbox<<get();
+							::rundicts[run]["defaulttosliders"]=0;
+							
+							// Call main script
+							Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
+							generateVariabilityReport(run);
+						),
+						ButtonBox("Failuremap",
 						
-						splitsfile=splitsbox<<get text();
-						dataname=datanamebox<<get text();
-						wafermap=wafermapbox<<get text();
-						groundrules=groundrulesbox<<get text();
-						
-						defaulttospecial=specialbox<<get();
-						defaulttoCE=splitCEbox<<get();
-						graphwidth=widthbox<<get();
-						graphheight=heightbox<<get();
-						tracklines=tracklinesbox<<get selected();
-						showlegend=showlegendbox<<get();
-						showreflines=reflinesbox<<get();
-						defaulttosliders=0;
-						
-						// Don't download anything!
-						do download=0;
-						get limits=0;
-						
-						// Call main script
-						Include(expr(::scriptdir||"prepToPlot.jsl"));
-						Include(expr(::scriptdir||"generateFailureWafermap.jsl"));
-						generateFailureWafermap(N Items(::rundicts));
-					)
+							// Get desires from GUI
+							whichparams=parambox<<get selected();
+							
+							splitsfile=splitsbox<<get text();
+							dataname=datanamebox<<get text();
+							wafermap=wafermapbox<<get text();
+							groundrules=groundrulesbox<<get text();
+							
+							defaulttospecial=specialbox<<get();
+							defaulttoCE=splitCEbox<<get();
+							graphwidth=widthbox<<get();
+							graphheight=heightbox<<get();
+							tracklines=tracklinesbox<<get selected();
+							showlegend=showlegendbox<<get();
+							showreflines=reflinesbox<<get();
+							defaulttosliders=0;
+							
+							// Don't download anything!
+							do download=0;
+							get limits=0;
+							
+							// Call main script
+							Include(expr(::scriptdir||"prepToPlot.jsl"));
+							Include(expr(::scriptdir||"generateFailureWafermap.jsl"));
+							generateFailureWafermap(N Items(::rundicts));
+						))),
+					BorderBox(Left(10),VListBox(
+						TextBox("Plot Parameter (select one):"),
+						plotparambox=ListBox({},width(151),nlines(6),<<Set Max Selected(1));
+					))
 				))),
+				BorderBox(Sides(15),Left(10),Right(10),Top(10),
+					TextBox("(You can also generate your own JMP plots from the data in the \!"Query\! Results\!" Table.)",<<SetWidth(250),<<Justify Text(Center))
+				)
 					
 )))));
 
+//Write("WHAT\!N");
 
 // Fill the parameter listing based on the current inputs (defaults)
-update parambox();
+Update ParamBox();

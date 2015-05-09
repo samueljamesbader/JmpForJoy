@@ -2,7 +2,7 @@
 Names Default To Here(1);
 
 // Generates a horizontal data table for select parameters from which the variability report can be generated.
-ReadLotTables=Function({run},{Default Local},
+developQuery=Function({query info},{Default Local},
 	
 	// Open the limits table, keeping it private (unaccessible)
 	// In fact, all tables opened in this script will be private except the final

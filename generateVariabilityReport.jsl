@@ -4,6 +4,10 @@ Names Default To Here(1);
 // Creates the graphical window showing the variability report
 generateVariabilityReport=Function({run},{Default Local},
 
+	::rundicts[run]["htab"]=DataTable("Query Results")<<Subset(
+		CopyFormula(1),SuppressFormulaEvalution(1),
+		OutputTableName("Copy for Run "||Char(run)));
+
 	// Short names for some later used variables
 	splitCE=::rundicts[run]["centeredge"];
 	htab=::rundicts[run]["htab"];
@@ -211,6 +215,7 @@ generateVariabilityReport=Function({run},{Default Local},
 		eval(eval expr(vb<<append(graph=expr(name expr(vargraph)))));
 		(graph<<report())<<set title(param);
 		(graph<<report())<<set auto stretching(0,0);
+		::rundicts[run]["pdict"][param]=AssociativeArray();
 		::rundicts[run]["pdict"][param]["graph"]=graph;
 		
 		// Apply the axis properties from rundicts to the axis
@@ -255,9 +260,9 @@ generateVariabilityReport=Function({run},{Default Local},
 		
 		// Append a number edit box for the LSL which, whenever changed, updates the LSL in rundicts and calls User Changed Spec Limits
 		eval(eval expr(limshb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"]=NumberEditBox(::rundicts[expr(run)]["pdict"][expr(param)]["LSL"],10,
+			::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"]=NumberEditBox(::querydict["pdict"][expr(param)]["LSL"],10,
 				<<Set Function(Function({},{},
-					::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<get();
+					::querydict["pdict"][expr(param)]["LSL"]=::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<get();
 					User Changed Spec Limits(expr(run),expr(param))))))));
 		
 		// Append a textbox saying USL in bold			
@@ -265,15 +270,15 @@ generateVariabilityReport=Function({run},{Default Local},
 		
 		// Append a number edit box for the USL which, whenever changed, updates the USL in rundicts and calls User Changed Spec Limits
 		eval(eval expr(limshb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"]=NumberEditBox(::rundicts[expr(run)]["pdict"][expr(param)]["USL"],10,
+			::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"]=NumberEditBox(::querydict["pdict"][expr(param)]["USL"],10,
 				<<Set Function(Function({},{},
-					::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<get();
+					::querydict["pdict"][expr(param)]["USL"]=::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<get();
 					User Changed Spec Limits(expr(run),expr(param))))))));
 		
 		
 		// Get the valid low and valid high from rundicts
-		lvl=::rundicts[run]["pdict"][param]["LVL"];
-		uvl=::rundicts[run]["pdict"][param]["UVL"];
+		lvl=::querydict["pdict"][param]["LVL"];
+		uvl=::querydict["pdict"][param]["UVL"];
 		
 		// Add a data filter and store a reference to it in rundicts
 		eval(eval expr(guibox<<append(
@@ -340,7 +345,7 @@ generateVariabilityReport=Function({run},{Default Local},
 			<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
 		)));
 		med=Column(DataTable("Stats"),param)[1];
-		iqr=::rundicts[run]["pdict"][param]["iqr"]=Column(DataTable("Stats"),param)[2];
+		iqr=::querydict["pdict"][param]["iqr"]=Column(DataTable("Stats"),param)[2];
 		t<<Close Window();
 		Close("Stats",NoSave);
 		slob<<append(medhb=VListBox());
@@ -351,25 +356,25 @@ generateVariabilityReport=Function({run},{Default Local},
 		::rundicts[run]["pdict"][param]["script"]=eval expr(
 		
 			// Start the LSL handlle at position (.5, LSL from rundicts)
-			Handle( .5, ::rundicts[expr(run)]["pdict"][expr(param)]["LSL"],
+			Handle( .5, ::querydict["pdict"][expr(param)]["LSL"],
 			
 				// Script for "as the mouse drags":
 				// Purely aesthetic, adjust the LSL in rundicts so the handle moves along with the mouse
-				Try(::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;)
+				Try(::querydict["pdict"][expr(param)]["LSL"]=y;)
 				,
 				// Script for "when the mouse releases":
 				// Update the LSL in rundicts and in the text box, then call User Changed Spec limits
 				// If there's an error (JMP has some race-condition bug here...), wait a sec and try again.
 				Try(
-					::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
-					::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<set(y);
+					::querydict["pdict"][expr(param)]["LSL"]=y;
+					::querydict["pdict"][expr(param)]["lslbox"] <<set(y);
 					User Changed Spec Limits(expr(run),expr(param));
 					,					
 					Try(
 						Write("Graphics Error.\!N");
 						Wait(1);
-						::rundicts[expr(run)]["pdict"][expr(param)]["LSL"]=y;
-						::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<set(y);
+						::querydict["pdict"][expr(param)]["LSL"]=y;
+						::querydict["pdict"][expr(param)]["lslbox"] <<set(y);
 						User Changed Spec Limits(expr(run),expr(param));
 						Write("Recovered\!N");,
 						Write("Couldn't Recover\!N");
@@ -378,19 +383,19 @@ generateVariabilityReport=Function({run},{Default Local},
 			);
 			
 			// Same stuff for the USL handle
-			Handle( .5,::rundicts[expr(run)]["pdict"][expr(param)]["USL"],
-				Try(::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;)
+			Handle( .5,::querydict["pdict"][expr(param)]["USL"],
+				Try(::querydict["pdict"][expr(param)]["USL"]=y;)
 				,
 				Try(
-					::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
-					::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<set(y);
+					::querydict["pdict"][expr(param)]["USL"]=y;
+					::querydict["pdict"][expr(param)]["uslbox"] <<set(y);
 					User Changed Spec Limits(expr(run),expr(param));
 					,
 					Try(
 						Write("Graphics Error.\!N");
 						Wait(1);
-						::rundicts[expr(run)]["pdict"][expr(param)]["USL"]=y;
-						::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<set(y);
+						::querydict["pdict"][expr(param)]["USL"]=y;
+						::querydict["pdict"][expr(param)]["uslbox"] <<set(y);
 						User Changed Spec Limits(expr(run),expr(param));
 						Write("Recovered\!N");,
 						Write("Couldn't Recover\!N");
@@ -411,10 +416,10 @@ Save Param=Function({run,param},{Default Local},
 	Filter to rundicts(run,param);
 	
 	// Short name for the relevant parameter dictionary
-	pd=::rundicts[run]["pdict"][param];
+	pd=::querydict["pdict"][param];
 	
 	// Ensure that dtLimits is open, and write in all our data
-	dtLimits=Open(::rundicts[run]["dtLimits path"],Private);
+	dtLimits=Open(limpath=::limsource||::querydict["limits"]||".limits.jmp";,Private);
 	r=pd["row"];
 	Column(dtLimits,"AXIS_SCALE")[r]=pd["SCALE"];
 	Column(dtLimits,"AXIS_LOW")[r]=pd["LAL"];
@@ -444,6 +449,7 @@ RecalcCPK=Function({run,param},{Default Local},
 	Write("Updating CPK\!N");
 	
 	// Short name for the relevant parameter dictionary
+	qpd=::querydict["pdict"][param];
 	pd=::rundicts[run]["pdict"][param];
 	
 	// Use the summarize function to get the relevant column statistics
@@ -451,8 +457,8 @@ RecalcCPK=Function({run,param},{Default Local},
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
 	
 	// Calculate values
-	cpu=(pd["USL"]-mu)/(3*sigma);
-	cpl=(mu-pd["LSL"])/(3*sigma);
+	cpu=(qpd["USL"]-mu)/(3*sigma);
+	cpl=(mu-qpd["LSL"])/(3*sigma);
 	
 	// Update fieds
 	pd["meanbox"]<<set text(Format(mu,"Best",7));
@@ -490,24 +496,25 @@ User Changed Spec Limits=Function({run,param},{Default Local},
 Rundicts To Axis=Function({run,param},{Default Local},
 
 	// Short name for the relevant parameter dictionary
+	qpd=::querydict["pdict"][param];
 	pd=::rundicts[run]["pdict"][param];
 	
 	// Expression of the properties
 	props to axis=eval expr({
-		Min(expr(pd["LAL"])),
-		Max(expr(pd["UAL"])),
-		Inc(expr(pd["INC"])),
-		Scale(expr(pd["SCALE"])),
-		expr(Parse(pd["FORMAT"])),
-		expr(eval expr(Minor Ticks(expr(pd["MT"]))))
+		Min(expr(qpd["LAL"])),
+		Max(expr(qpd["UAL"])),
+		Inc(expr(qpd["INC"])),
+		Scale(expr(qpd["SCALE"])),
+		expr(Parse(qpd["FORMAT"])),
+		expr(eval expr(Minor Ticks(expr(qpd["MT"]))))
 	});	
 	
 	// If ref lines are desired, add them in as well
 	If(::rundicts[run]["showreflines"],
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(pd["USL"]), Solid, "Black", "USL", 1)));
+			eval expr(Add Ref Line(expr(qpd["USL"]), Solid, "Black", "USL", 1)));
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(pd["LSL"]), Solid, "Black", "LSL", 1)));
+			eval expr(Add Ref Line(expr(qpd["LSL"]), Solid, "Black", "LSL", 1)));
 	);
 		
 	// Send the expression to the graph
@@ -530,19 +537,19 @@ Axis to Rundicts=Function({run,param},{Default Local},
 	Show(ax script);
 	
 	// Save values from the axis script into rundicts
-	::rundicts[run]["pdict"][param]["LAL"]=ax script["Min"];
-	::rundicts[run]["pdict"][param]["UAL"]=ax script["Max"];
-	::rundicts[run]["pdict"][param]["INC"]=ax script["Inc"];
-	::rundicts[run]["pdict"][param]["SCALE"]=ax script["Scale"];
-	::rundicts[run]["pdict"][param]["MT"]=ax script["Minor Ticks"];
+	::querydict["pdict"][param]["LAL"]=ax script["Min"];
+	::querydict["pdict"][param]["UAL"]=ax script["Max"];
+	::querydict["pdict"][param]["INC"]=ax script["Inc"];
+	::querydict["pdict"][param]["SCALE"]=ax script["Scale"];
+	::querydict["pdict"][param]["MT"]=ax script["Minor Ticks"];
 	
 	// It's a bit trickier to extract the format from axis script
 	// Cycle through ax script looking for an expression whose head is "Format()"
 	For(i=1,i<=Length(ax script),i++,
-		::rundicts[run]["pdict"][param]["FORMAT"]=
+		::querydict["pdict"][param]["FORMAT"]=
 			If(Head Expr(ax script[i])==expr(Format()),
 				Char(ax script[i]),
-				::rundicts[run]["pdict"][param]["FORMAT"]
+				::querydict["pdict"][param]["FORMAT"]
 	));
 	
 );
@@ -568,14 +575,14 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	// does not mean to filter in that direction, so the limit should be ignored (ie use '.')
 	//
 	// "near to" = within one hundredth of an (unfiltered) IQR
-	iqr=::rundicts[run]["pdict"][param]["iqr"];
+	iqr=::querydict["pdict"][param]["iqr"];
 	If(Abs(lvl-Col Minimum(Column(::rundicts[run]["htab"],param)))<iqr/100,lvl=.);
 	If(Abs(uvl-Col Maximum(Column(::rundicts[run]["htab"],param)))<iqr/100,uvl=.);
 	
 	Write("Saving LVL: "||Char(lvl)||" UVL: "||Char(uvl)||"\!N");
 	// Save to rundicts
-	::rundicts[run]["pdict"][param]["LVL"]=lvl;
-	::rundicts[run]["pdict"][param]["UVL"]=uvl;	
+	::querydict["pdict"][param]["LVL"]=lvl;
+	::querydict["pdict"][param]["UVL"]=uvl;	
 );
 
 // Evaluate all the failure columns (eg after spec limits or filtering have changed), and fix the

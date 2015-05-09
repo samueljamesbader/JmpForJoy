@@ -1,0 +1,11 @@
+qr=DataTable("Query Results");
+Column(qr,12)<<hide(0);
+Column(qr,12)<<hide;
+Column(qr,13)<<hide;
+Column(qr,14)<<hide;
+
+qr << Run Formulas();
+
+
+Column(qr,12)<<EvalFormula;
+Column(qr,15)<<EvalFormula;
