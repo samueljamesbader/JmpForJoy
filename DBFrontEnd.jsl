@@ -31,7 +31,7 @@ Close All(Data Tables);
 ::defaults["wafer"]="";
 ::defaults["splits"]="splits\samtestsplits.xlsx";
 ::defaults["wafermap"]="pc17_WAT";
-::defaults["user"]="SamBader";
+::defaults["user"]="";
 
 /////
 // Utitilities for generating SQL
@@ -465,9 +465,16 @@ eval(eval expr(New Window("JmpForJoy",
 							run=N Items(::rundicts)+1;
 							::rundicts[run]=AssociativeArray();
 							
-							// Get desires from GUI
-							Try(::rundicts[run]["param"]=(plotparambox<<get selected())[1];,
+							// Make sure the current query exists
+							Try(DataTable(querytablebox<<gettext()),
+								Throw("No current query to plot from!"));
+							
+							// Make sure there's a parameter selected
+							Try((plotparambox<<get selected())[1],
 							Throw("Select a parameter to plot!\!N"||"(The little box on the right.)"));
+							
+							// Get desires from GUI							
+							::rundicts[run]["param"]=(plotparambox<<get selected())[1];
 							::rundicts[run]["querytable"]=querytablebox<<gettext();
 							::rundicts[run]["specialanalysis"]=specialbox<<get();
 							::rundicts[run]["centeredge"]=splitCEbox<<get();
@@ -480,11 +487,33 @@ eval(eval expr(New Window("JmpForJoy",
 							::rundicts[run]["source"]=sourcebox<<gettext();
 							::rundicts[run]["project"]=projectbox<<gettext();
 							::rundicts[run]["authlim"]=authlimbox<<get();
-							::rundicts[run]["user"]=userbox<<gettext();
+							::rundicts[run]["user"]=LowerCase(userbox<<gettext());
 							
-							// Call variability report script
-							Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
-							generateVariabilityReport(run);
+							
+							
+							// If the username was left blank, yell at the user
+							If(::rundicts[run]["user"]=="",
+								NewWindow(
+									"Please enter a username",<<Modal,
+									TextBox("  Before you use the plotting functionality, "||
+									"please enter a JmpForJoy username.  "||
+									"It can be anything.  This will help the software "||
+									"track your axis preferences "||
+									"and adjusted limits and such.",<<SetWrap(300)),
+									TextBox("  You can put your"||
+									" username directly into this script "||
+									"to save time in the future. Just search DBFrontEnd.jsl for "||
+									"<b>::defaults[\!"user\!"]=\!"\!";</b>,"||
+									" and put in your name!",
+									<<Set Wrap(300),
+									<<Markup(1))
+								);
+								,
+								// Otherwise, call variability report script
+								Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
+								generateVariabilityReport(run);									
+							);
+							
 						),
 						ButtonBox("Failuremap",
 					
