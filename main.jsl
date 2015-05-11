@@ -1,9 +1,0 @@
-// Use the local namespace
-Names Default To Here(1);
-
-// Generate horizontal table
-include("prepToPlot.jsl");
-
-// Generate the actual report
-include("generateVariabilityReport.jsl");
-generateVariabilityReport(N Items(::rundicts));

@@ -1,19 +1,41 @@
-// Dictionary of wafermaps
+// Dictionary of which sites should be considered edges
 ::CE Maps=Associative Array();
 
 ///
-// Here you list, for the pc17_WAT wafermap, all of the EDGE COORDINATES.
+// Here you list, for the pc17 WAT wafermap, all of the EDGE COORDINATES.
 ///
-::CE Maps["pc17_WAT"]=Associative Array(
+::CE Maps["FinalWATCMOS-Falcon-pc17"]=Associative Array(
 	{"0_-3" ,"1_-3" ,"2_-2" ,"3_-1" ,"3_0"  ,"3_1"  ,"2_2"  ,
 	 "2_3"  ,"1_3"  ,"0_4"  ,"-1_4" ,"-2_3" ,"-3_3", "-3_2" ,
 	 "-4_1" ,"-4_0" ,"-4_-1","-3_-2","-3_-2","-2_-3","-1_-3" });
+::CE Maps["FinalWATBipolar-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
+::CE Maps["M3WATCMOS-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
+::CE Maps["M3WATBipolar-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
+
+
+///
+// Here you list, for the pc15 WAT wafermap, all of the EDGE COORDINATES.
+///
+// These WAT pc15 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!
+Write("THESE pc15 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!\!N");
+::CE Maps["FinalWATBipolar-Falcon-pc15"]=Associative Array({"."});
+::CE Maps["FinalWATCMOS-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
+::CE Maps["M3WATCMOS-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
+::CE Maps["M3WATBipolar-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
+
 
 ///	 
-// Here you list, for the pc17_Keithley wafermap, all of the EDGE COORDINATES.
+// Here you list, for the pc17 Keithley wafermap, all of the EDGE COORDINATES.
 ///
-::CE Maps["pc17_Keithley"]=Associative Array(
+::CE Maps["Keithley-Falcon-pc17"]=Associative Array(
 	{"1_-3" ,"2_-3" ,"3_-2" ,"4_-1" ,"4_0"  ,"4_1"  ,"3_2"  ,
 	 "3_3"  ,"2_3"  ,"1_4"  ,"0_4" ,"-1_3" ,"-2_3", "-2_2" ,
 	 "-3_1" ,"-3_0" ,"-3_-1","-2_-2","-2_-2","-1_-3","-0_-3" });
+
+///
+// Here you list, for the pc11 Keithley wafermap, all of the EDGE COORDINATES.
+///
+// These Keithley pc11 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!
+Write("These Keithley pc11 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!\!N");
+::CE Maps["Keithley-Falcon-pc11"]=Associative Array({"."});
 	 

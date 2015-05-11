@@ -4,14 +4,34 @@ Names Default To Here(1);
 // Creates the graphical window showing the variability report
 generateVariabilityReport=Function({run},{Default Local},
 
-	::rundicts[run]["htab"]=DataTable("Query Results")<<Subset(
-		CopyFormula(1),SuppressFormulaEvalution(1),
-		OutputTableName("Copy for Run "||Char(run)));
-
-	// Short names for some later used variables
-	splitCE=::rundicts[run]["centeredge"];
+	// Create a copy of the query results table
+	include(::scriptdir||"prepRun.jsl");
+	prepRun(run);
+	
+	// Short names for oft-used variables
+	param=::rundicts[run]["param"];
 	htab=::rundicts[run]["htab"];
-	params=::rundicts[run]["whichparams"];
+	splitCE=::rundicts[run]["centeredge"];
+	fail_param=Concat(param,"_FAILPCT");
+	
+	
+	// Get the unfiltered data median and iqr from an invisible stats table
+	// Close the invisible table and associated extraneous window
+	// We'll use the values when we make the GUI controls
+	eval(eval expr(
+	t=htab<<Tabulate(
+		Show Control Panel( 0 ),
+		Add Table(
+			Column Table( Analysis Columns( expr(column(htab,param) ) ) ),
+			Row Table( Statistics( Median, Interquartile Range) )
+		),
+		<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
+	)));
+	med=Column(DataTable("Stats"),param)[1];
+	iqr=::rundicts[run]["iqr"]=Column(DataTable("Stats"),param)[2];
+	t<<Close Window();
+	Close("Stats",NoSave);
+		
 	
 	// If special analysis, then open a column dialog for the user to vary the analysis
 	If(::rundicts[run]["specialanalysis"],
@@ -19,7 +39,7 @@ generateVariabilityReport=Function({run},{Default Local},
 		// Give the usual X and X Grouping variables as default
 		cd = Column Dialog(
 			xvars = ColList("X Variables",Columns(:WAFER)),
-			xgroupers =  ColList("X Grouping",Columns(:LOT_ID)),
+			xgroupers =  ColList("X Grouping",Columns(:LOT)),
 		);
 		
 		// After the user makes a selection, collect it.
@@ -29,11 +49,13 @@ generateVariabilityReport=Function({run},{Default Local},
 		,
 		// Otherwise (ie not special analysis), just use the default variables
 		xvars= List(:WAFER);
-		xgroupers= List(:LOT_ID);
+		xgroupers= List(:LOT);
 	);
 	
+	
+	
 	// Create the window
-	win=New Window("Variability, Run "||Char(run), vb=V List Box());
+	win=New Window(param, vb=V List Box());
 	
 	// When the report is closed, it should also
 	// - note this in the log
@@ -48,360 +70,320 @@ generateVariabilityReport=Function({run},{Default Local},
 			);
 	));	
 	
-	// For each parameter
-	For( p=1, p<=N Items(params), p+=1,	
-		param=params[p];
-		fail_param=Concat(param,"_FAILPCT");
+	
+	// Build the list of variables for the graph
+	varexpr=expr(Variables());
+	
+	// First put in each X variable
+	for(i=1, i<=n items(xvars),i+=1,
+		insertinto(varexpr,eval expr( X(expr(xvars[i]),Position(1)))));
+	
+	// Put in the failure columns and parameter columns
+	insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param)))));
+	insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param||" edge")),Position(1))));
+	insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param||" center")),Position(1))));
+	insertinto(varexpr,eval expr(Y(column(htab,expr(param)))));
+	insertinto(varexpr,eval expr(Y(column(htab,expr(param||" edge")),Position(2))));
+	insertinto(varexpr,eval expr(Y(column(htab,expr(param||" center")),Position(2))));
+	
+	// Put in each X Grouping variable, 
+	// noting that LOT should be chronologically ordered
+	for(i=1, i<=n items(xgroupers), i+=1,
+	
+		// If it's one of those that needs to be ordered
+		if( ((xgroupers[i])<<Get Name)=="LOT",
 		
-		// The next blocks of code will format the (possible varied) x and y variables into a single
-		// expression for the Graph Builder's "Variables"" argument.
-		// A typical outcome of this chunk of code might be:
-		// varexpr =
-		//  Variables(
-		//		X(:WAFER, Position(1)),
-		//		Y(Column(htab, "N.18X5_BF@.6V_FAILPCT")),
-		//		Y(Column(htab, "N.18X5_BF@.6V_FAILPCT edge"), Position(1)),
-		//		Y(Column(htab, "N.18X5_BF@.6V_FAILPCT center"), Position(1)),
-		//		Y(Column(htab, "N.18X5_BF@.6V")),
-		//		Y(Column(htab, "N.18X5_BF@.6V edge"),Position(2)),
-		//		Y(Column(htab, "N.18X5_BF@.6V center"), Position(2))
-		// 		Group X(:LOT_ID,
-		//			Order By(:NumericDate, Ascending, Order Statistic("Mean")), Show Title(0)));
-		varexpr=expr(Variables());
-		
-		// First put in each X variable
-		for(i=1, i<=n items(xvars),i+=1,
-			insertinto(varexpr,eval expr( X(expr(xvars[i]),Position(1)))));
-		
-		// Put in the failure columns and parameter columns
-		insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param)))));
-		insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param||" edge")),Position(1))));
-		insertinto(varexpr,eval expr(Y(column(htab,expr(fail_param||" center")),Position(1))));
-		insertinto(varexpr,eval expr(Y(column(htab,expr(param)))));
-		insertinto(varexpr,eval expr(Y(column(htab,expr(param||" edge")),Position(2))));
-		insertinto(varexpr,eval expr(Y(column(htab,expr(param||" center")),Position(2))));
-		
-		// Put in each X Grouping variable, 
-		// noting that LOT_ID and PCM_SPEC should be chronologically ordered
-		for(i=1, i<=n items(xgroupers), i+=1,
-		
-			// If it's one of those that needs to be ordered
-			if( ((xgroupers[i]<<Get Name)=="LOT_ID") | ((xgroupers[i]<<Get Name)=="PCM_SPEC"),
+			// Include the ordering info
+			insertinto(varexpr,
+				eval expr(Group X(expr(xgroupers[i]),
+					Order By( :TESTDATE, Ascending, Order Statistic( "Mean" ) ),
+					Show Title( 0 ) ))),
 			
-				// Include the ordering info
-				insertinto(varexpr,
-					eval expr(Group X(expr(xgroupers[i]),
-						Order By( :NumericDate, Ascending, Order Statistic( "Mean" ) ),
-						Show Title( 0 ) ))),
+			// Otherwise just put it in plain
+			insertinto(varexpr,
+				eval expr(Group X(expr(xgroupers[i])))))
+	);
+	
+	// Create an expression that would build the graph
+	vargraph=eval expr(
+		Graph Builder(
+			
+			// Size of graph from rundicts
+			expr(::rundicts[run]["graphsize"]),
+			
+			// Hide control panel
+			Show Control Panel( 0 ),
+			
+			// Whether to show legend from rundicts
+			Show Legend( expr(::rundicts[run]["showlegend"]) ),
+			
+			// Put the X Groups along the bottom of the plot
+			X Group Edge( "Bottom" ),
+			
+			// Variables from expression built above
+			expr(name expr(varexpr)),
+			
+			// Relative sizing of top and bottom plots
+			Relative Sizes( "Y", [1 3] ),
+			
+			// Elements of top (failure) plot
+			Elements(
+				Position( 1, 1 ),
 				
-				// Otherwise just put it in plain
-				insertinto(varexpr,
-					eval expr(Group X(expr(xgroupers[i])))))
-		);
-		
-		// Create an expression that would build the graph
-		vargraph=eval expr(
-			Graph Builder(
+				// Two lines if center-edge split, else one line
+				expr(If(splitCE,
+					expr(Line(X,Y(2),Y(3),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
+					,
+					expr(Line(X,Y(1),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
+				))
+			),
+			
+			// Elements of bottom (values) plot
+			Elements(
+				Position( 1, 2 ),
 				
-				// Size of graph from rundicts
-				expr(::rundicts[run]["graphsize"]),
+				// Two points-plots if center-edge split, else one line
+				expr(If(splitCE,
+					expr(Points( X, Y(2), Y(3), Legend( 1 ), Jitter( 1 ) )),
+					expr(Points( X, Y(1), Legend( 1 ), Jitter( 1 ) )),
+				)),
 				
-				// Hide control panel
-				Show Control Panel( 0 ),
+				// Two box-plots if center-edge split, else one line
+				expr(If(splitCE,
+					expr(Box Plot(X,Y(2),Y(3),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" ))),
+					expr(Box Plot(X,Y(1),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" )))	
+				)),
 				
-				// Whether to show legend from rundicts
-				Show Legend( expr(::rundicts[run]["showlegend"]) ),
-				
-				// Put the X Groups along the bottom of the plot
-				X Group Edge( "Bottom" ),
-				
-				// Variables from expression built above
-				expr(name expr(varexpr)),
-				
-				// Relative sizing of top and bottom plots
-				Relative Sizes( "Y", [1 3] ),
-				
-				// Elements of top (failure) plot
-				Elements(
-					Position( 1, 1 ),
-					
-					// Two lines if center-edge split, else one line
-					expr(If(splitCE,
-						expr(Line(X,Y(2),Y(3),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
-						,
-						expr(Line(X,Y(1),Legend( 8 ),Row order( 0 ),Summary Statistic( "Mean" )))
-					))
-				),
-				
-				// Elements of bottom (values) plot
-				Elements(
-					Position( 1, 2 ),
-					
-					// Two points-plots if center-edge split, else one line
-					expr(If(splitCE,
-						expr(Points( X, Y(2), Y(3), Legend( 1 ), Jitter( 1 ) )),
-						expr(Points( X, Y(1), Legend( 1 ), Jitter( 1 ) )),
-					)),
-					
-					// Two box-plots if center-edge split, else one line
-					expr(If(splitCE,
-						expr(Box Plot(X,Y(2),Y(3),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" ))),
-						expr(Box Plot(X,Y(1),Legend( 6 ),Jitter( 1 ),Outliers( 0 ),Box Style( "Outlier" )))	
-					)),
-					
-					// Lines through the mean/median of data if indicated in rundicts
-					expr(If(Not(::rundicts[run]["tracklines"]=="None"),
-						If(splitCE,
-							eval expr(Line(X, Y( 2 ),	Y( 3 ),	Legend( 9 ),Row order( 0 ),
-								Summary Statistic( expr(::rundicts[run]["tracklines"]) ))),
-							eval expr(Line(X, Y( 1 ),	Legend( 9 ),Row order( 0 ),
-								Summary Statistic( expr(::rundicts[run]["tracklines"]) )))
-						),
-						.
-					))
-				),
-				
-				// Send various tweaks to the plots
-				SendToReport(
-				
-					// Format the failure chart
-					Dispatch(
-						{},
-						expr(fail_param),
-						ScaleBox,
-						{Format( "Percent", 10, 0 ), 
-						Minor Ticks( 1 ), Show Major Grid( 1 ), Show Minor Ticks( 0 ), Inside Ticks( 1 )}
+				// Lines through the mean/median of data if indicated in rundicts
+				expr(If(Not(::rundicts[run]["tracklines"]=="None"),
+					If(splitCE,
+						eval expr(Line(X, Y( 2 ),	Y( 3 ),	Legend( 9 ),Row order( 0 ),
+							Summary Statistic( expr(::rundicts[run]["tracklines"]) ))),
+						eval expr(Line(X, Y( 1 ),	Legend( 9 ),Row order( 0 ),
+							Summary Statistic( expr(::rundicts[run]["tracklines"]) )))
 					),
-					
-					// Title the failure plot
-					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
-					
-					// Title the overall graph
-					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
-					
-					// Title the values plot with the parameter name
-					Dispatch( {}, "Y 1 title", TextEditBox, {Set Text( expr(param) )} ),
-					
-					// Choose a good format for the numbers on the axis
-					Dispatch( {}, expr(param), ScaleBox, {Format("Best")}),
-					
-					// Remove the unneeded title from the X-axis
-					Dispatch( {}, "X title", TextEditBox, {Set Text( "" )} ),
-					
-					// Change the mean/median lines color to match the points colors
-					expr(If(Not(::rundicts[run]["tracklines"]=="None"),
-						If(splitCE,
-							expr(Dispatch(
+					.
+				))
+			),
+			
+			// Send various tweaks to the plots
+			SendToReport(
+			
+				// Format the failure chart
+				Dispatch(
+					{},
+					expr(fail_param),
+					ScaleBox,
+					{Format( "Percent", 10, 0 ), 
+					Minor Ticks( 1 ), Show Major Grid( 1 ), Show Minor Ticks( 0 ), Inside Ticks( 1 )}
+				),
+				
+				// Title the failure plot
+				Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
+				
+				// Title the overall graph
+				Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
+				
+				// Title the values plot with the parameter name
+				Dispatch( {}, "Y 1 title", TextEditBox, {Set Text( expr(param) )} ),
+				
+				// Choose a good format for the numbers on the axis
+				Dispatch( {}, expr(param), ScaleBox, {Format("Best")}),
+				
+				// Remove the unneeded title from the X-axis
+				Dispatch( {}, "X title", TextEditBox, {Set Text( "" )} ),
+				
+				// Change the mean/median lines color to match the points colors
+				expr(If(Not(::rundicts[run]["tracklines"]=="None"),
+					If(splitCE,
+						expr(Dispatch(
+						{},
+						"400",
+						ScaleBox,
+						{Legend Model(
+							9,
+							Properties( 0, {Line Color( 21 )} ),
+							Properties( 1, {Line Color( 19 )} )
+						)})),
+						expr(Dispatch(
 							{},
 							"400",
 							ScaleBox,
-							{Legend Model(
-								9,
-								Properties( 0, {Line Color( 21 )} ),
-								Properties( 1, {Line Color( 19 )} )
-							)})),
-							expr(Dispatch(
-								{},
-								"400",
-								ScaleBox,
-								{Legend Model( 9, Properties( 0, {Line Color( 0 )} ) )}
-							))
-						)))
+							{Legend Model( 9, Properties( 0, {Line Color( 0 )} ) )}
+						))
+					)))
+			)
+		)
+	);
+	
+	// Build the graph, set preferences, and store a reference to it in rundicts
+	eval(eval expr(vb<<append(graph=expr(name expr(vargraph)))));
+	(graph<<report())<<set title(param);
+	(graph<<report())<<set auto stretching(0,0);
+	::rundicts[run]["graph"]=graph;
+	
+	// Apply the axis properties from rundicts to the axis
+	Rundicts To Axis(run,param);
+	
+	// Make sure the failure plot is up-to-date
+	Update Failures(run,param);
+			
+	// Build the addtional interface below
+	eval(eval expr((graph<<report())<<append(
+		HListBox(
+			slob=OutlineBox("Spec Limits",<<OutlineCloseOrientation(Horizontal),
+			
+				// The limit controls.  If these are changed,
+				// they update rundicts and call UserChangedSpecLimits()
+				limshb=H List Box(
+					TextBox("<b> LSL:  </b>",<<Markup(1)),
+					::rundicts[expr(run)]["lslbox"]=NumberEditBox(::rundicts[expr(run)]["LSL"],10,
+						<<Set Function(Function({},{},
+							::rundicts[expr(run)]["LSL"]=::rundicts[expr(run)]["lslbox"] <<get();
+							User Changed Spec Limits(expr(run),expr(param))))),
+					TextBox("<b>  USL:  </b>",<<Markup(1)),
+					::rundicts[expr(run)]["uslbox"]=NumberEditBox(::rundicts[expr(run)]["USL"],10,
+						<<Set Function(Function({},{},
+							::rundicts[expr(run)]["USL"]=::rundicts[expr(run)]["uslbox"] <<get();
+							User Changed Spec Limits(expr(run),expr(param)))))),		
+				buthb=H List Box(Align(Center),
+					::rundicts[run]["slidercheck"]=CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(param))),
+					ButtonBox("Recalc CPK", RecalcCPK(expr(run),expr(param))),
+					ButtonBox("Save Param",Save Param(expr(run),expr(param))),
+				),
+				
+				// Add in the various text labels and text boxes for the CPK items
+				cpkhb=H List Box(
+					TextBox("<b> Mean:  </b>",<<Markup(1)),
+					::rundicts[expr(run)]["meanbox"]=TextBox("Hit Recalc"),
+					TextBox("<b>  CPL:  </b>",<<Markup(1)),
+					::rundicts[expr(run)]["cplbox"]=TextBox("Hit Recalc"),
+					TextBox("<b>  CPU:  </b>",<<Markup(1)),
+					::rundicts[expr(run)]["cpubox"]=TextBox("Hit Recalc";)
+				),
+				
+				// Median, iqr, and value invert checkbox
+				medhb=VListBox(
+					TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)),
+					TextBox("<b> Unfiltered IQR:  </b>"||Format(iqr,"Best",7),<<Markup(1),<<SetWidth(200)),
+					
+					// If the value invert checkbox is changed, update ::rundicts and do the inversion,
+					// then call UserChangedSpecLimits() because LSL and USL had to change
+					::rundicts[expr(run)]["valinvbox"]=CheckBox("Invert Values",<<Set(::rundicts[expr(run)]["VALINV"]),
+					
+						// Update ::rundicts
+						::rundicts[expr(run)]["VALINV"]=::rundicts[expr(run)]["valinvbox"]<<get();
+						
+						// Do the inversion
+						swaplsl=-::rundicts[expr(run)]["USL"];
+						swapusl=-::rundicts[expr(run)]["LSL"];
+						::rundicts[expr(run)]["LSL"]=swaplsl;
+						::rundicts[expr(run)]["USL"]=swapusl;
+						Column(::rundicts[expr(run)]["htab"],expr(param))
+							<<SetValues(-1*(Column(::rundicts[expr(run)]["htab"],expr(param))<<Get Values()));
+						
+						// Update the GUI
+						::rundicts[expr(run)]["lslbox"] <<set(::rundicts[expr(run)]["LSL"]);
+						::rundicts[expr(run)]["uslbox"] <<set(::rundicts[expr(run)]["USL"]);
+						User Changed Spec Limits(expr(run),expr(param));
+					)
 				)
+
+			),
+			// Add a data filter and store a reference to it in rundicts
+			::rundicts[run]["datfilt"]=htab<<DataFilter(
+				Set Select(0),Set Show(1),Set Include(1),
+				Add( Filter Columns(as name(expr(param)))))
+		));
+	));		
+	
+	// If default to sliders, then set to checked, and call Toggle Sliders
+	If(::rundicts[run]["defaulttosliders"],
+		(::rundicts[run]["slidercheck"])<<Set(1);
+		ToggleSliders(run,param)
+	);
+	
+	// Get the valid low and valid high from rundicts
+	lvl=::rundicts[run]["LVL"];
+	uvl=::rundicts[run]["UVL"];
+	datfilt=::rundicts[run]["datfilt"];
+	
+	
+	// Use the just-obtained lvl and uvl as the default filter limits
+	// The expression is slightly different depending on which values are missing.
+	If(Not(Is Missing(lvl)) & Not(Is Missing(uvl)),
+		eval(eval expr(
+			datfilt<< (Filter Column(expr(as name(param))) <<
+				where(	as column(expr(param))>=expr(lvl) &
+						as column(expr(param))<=expr(uvl)))))	
+		,
+		If(Not(Is Missing(lvl)),
+			eval(eval expr(
+				datfilt<< (Filter Column(expr(as name(param))) <<
+					where(as column(expr(param))>=expr(lvl)))))	
+		);
+		If(Not(Is Missing(uvl)),
+			eval(eval expr(
+				datfilt<< (Filter Column(expr(as name(param))) <<
+					where(as column(expr(param))<=expr(uvl)))))	
+		);
+	);
+	
+	// Also, tell JMP that when the filter is closed, it should close horizontally for aesthetic reasons
+	((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);
+
+	// Run the calculation for CPK
+	RecalcCPK(run,param);
+	
+	// Script for the graphical handles (I call them "sliders") on the spec limits
+	::rundicts[run]["script"]=eval expr(
+	
+		// Start the LSL handlle at position (.5, LSL from rundicts)
+		Handle( .5, ::rundicts[expr(run)]["LSL"],
+		
+			// Script for "as the mouse drags":
+			// Purely aesthetic, adjust the LSL in rundicts so the handle moves along with the mouse
+			Try(::rundicts[expr(run)]["LSL"]=y;)
+			,
+			// Script for "when the mouse releases":
+			// Update the LSL in rundicts and in the text box, then call User Changed Spec limits
+			// If there's an error (JMP has some race-condition bug here...), wait a sec and try again.
+			Try(
+				::rundicts[expr(run)]["LSL"]=y;
+				::rundicts[expr(run)]["lslbox"] <<set(y);
+				User Changed Spec Limits(expr(run),expr(param));
+				,					
+				Try(
+					Write("Graphics Error.\!N");
+					Wait(1);
+					::rundicts[expr(run)]["LSL"]=y;
+					::rundicts[expr(run)]["lslbox"] <<set(y);
+					User Changed Spec Limits(expr(run),expr(param));
+					Write("Recovered\!N");,
+					Write("Couldn't Recover\!N");
+				);
 			)
 		);
 		
-		// Build the graph, set preferences, and store a reference to it in rundicts
-		eval(eval expr(vb<<append(graph=expr(name expr(vargraph)))));
-		(graph<<report())<<set title(param);
-		(graph<<report())<<set auto stretching(0,0);
-		::rundicts[run]["pdict"][param]=AssociativeArray();
-		::rundicts[run]["pdict"][param]["graph"]=graph;
-		
-		// Apply the axis properties from rundicts to the axis
-		Rundicts To Axis(run,param);
-		
-		// Make sure the failure plot is up-to-date
-		Update Failures(run,param);
-				
-		// Build the addtional interface below
-		// guibox holds everything
-		(graph<<report())<<append(guibox=HListBox());
-		
-		// slob [Spec Limits Outline Box] holds the various spec limits - related things
-		guibox<<append(slob=OutlineBox("Spec Limits",<<OutlineCloseOrientation(Horizontal)));
-		
-		// limshb, within slob, holds the limit controls
-		slob<<append(limshb=H List Box());
-		
-		// buthb, within slob, holds the slider checkbox, the Recalc CPK button, and the Save button
-		slob<<append(buthb=H List Box(Align(Center)));
-		
-		// Sliders checkbox, calls Toggle Sliders whenever changed
-		eval(eval expr(buthb<<append(::rundicts[run]["pdict"][param]["slidercheck"]=
-			CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(param))))));
-		
-		// If default to sliders, then set to checked, and call Toggle Sliders
-		If(::rundicts[run]["defaulttosliders"],
-			(::rundicts[run]["pdict"][param]["slidercheck"])<<Set(1);
-			ToggleSliders(run,param)
-		);
-		
-		// Add the RecalcCPK buton, which calls Recalc CPK whenever pressed
-		eval(eval expr(buthb<<append(
-			ButtonBox("Recalc CPK", RecalcCPK(expr(run),expr(param))))));
-			
-		// Add the Save button, which calls Save Param whenever pressed
-		eval(eval expr(buthb<<append(ButtonBox("Save Param",
-			Save Param(expr(run),expr(param))))));
-		
-		// Append a textbox saying LSL in bold
-		limshb<<append(TextBox("<b> LSL:  </b>",<<Markup(1)));
-		
-		// Append a number edit box for the LSL which, whenever changed, updates the LSL in rundicts and calls User Changed Spec Limits
-		eval(eval expr(limshb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"]=NumberEditBox(::querydict["pdict"][expr(param)]["LSL"],10,
-				<<Set Function(Function({},{},
-					::querydict["pdict"][expr(param)]["LSL"]=::rundicts[expr(run)]["pdict"][expr(param)]["lslbox"] <<get();
-					User Changed Spec Limits(expr(run),expr(param))))))));
-		
-		// Append a textbox saying USL in bold			
-		limshb<<append(TextBox("<b>  USL:  </b>",<<Markup(1)));
-		
-		// Append a number edit box for the USL which, whenever changed, updates the USL in rundicts and calls User Changed Spec Limits
-		eval(eval expr(limshb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"]=NumberEditBox(::querydict["pdict"][expr(param)]["USL"],10,
-				<<Set Function(Function({},{},
-					::querydict["pdict"][expr(param)]["USL"]=::rundicts[expr(run)]["pdict"][expr(param)]["uslbox"] <<get();
-					User Changed Spec Limits(expr(run),expr(param))))))));
-		
-		
-		// Get the valid low and valid high from rundicts
-		lvl=::querydict["pdict"][param]["LVL"];
-		uvl=::querydict["pdict"][param]["UVL"];
-		
-		// Add a data filter and store a reference to it in rundicts
-		eval(eval expr(guibox<<append(
-				datfilt=htab<<DataFilter(
-				Set Select(0),Set Show(1),Set Include(1),
-				Add( Filter Columns(as name(expr(param))))
-		))));
-		::rundicts[run]["pdict"][param]["datfilt"]=datfilt;
-		
-		
-		// Use the just-obtained lvl and uvl as the default filter limits
-		// The expression is slightly different depending on which values are missing.
-		If(Not(Is Missing(lvl)) & Not(Is Missing(uvl)),
-			eval(eval expr(
-				datfilt<< (Filter Column(expr(as name(param))) <<
-					where(	as column(expr(param))>=expr(lvl) &
-							as column(expr(param))<=expr(uvl)))))	
+		// Same stuff for the USL handle
+		Handle( .5,::rundicts[expr(run)]["USL"],
+			Try(::rundicts[expr(run)]["USL"]=y;)
 			,
-			If(Not(Is Missing(lvl)),
-				eval(eval expr(
-					datfilt<< (Filter Column(expr(as name(param))) <<
-						where(as column(expr(param))>=expr(lvl)))))	
-			);
-			If(Not(Is Missing(uvl)),
-				eval(eval expr(
-					datfilt<< (Filter Column(expr(as name(param))) <<
-						where(as column(expr(param))<=expr(uvl)))))	
-			);
-		);
-		
-		// Also, tell JMP that when the filter is closed, it should close horizontally for aesthetic reasons
-		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);
-		
-		// cpkhb holds the CPK-related fields
-		slob<<append(cpkhb=H List Box());
-		
-		// Add in the various text labels and text boxes for the CPK items
-		cpkhb<<append(TextBox("<b> Mean:  </b>",<<Markup(1)));
-		eval(eval expr(cpkhb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["meanbox"]=
-				TextBox("Hit Recalc";))));
-		cpkhb<<append(TextBox("<b>  CPL:  </b>",<<Markup(1)));
-		eval(eval expr(cpkhb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["cplbox"]=
-				TextBox("Hit Recalc";))));
-		cpkhb<<append(TextBox("<b>  CPU:  </b>",<<Markup(1)));
-		eval(eval expr(cpkhb<<append(
-			::rundicts[expr(run)]["pdict"][expr(param)]["cpubox"]=
-				TextBox("Hit Recalc";))));
-				
-		// Run the calculation for CPK
-		RecalcCPK(run,param);
-		
-		// Get the unfiltered data median and iqr from an invisible stats table
-		// Close the invisible table and associated extraneous window
-		// Add the median and iqr fields to medhb and add medhb to slob
-		eval(eval expr(
-		t=htab<<Tabulate(
-			Show Control Panel( 0 ),
-			Add Table(
-				Column Table( Analysis Columns( expr(column(htab,param) ) ) ),
-				Row Table( Statistics( Median, Interquartile Range) )
-			),
-			<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
-		)));
-		med=Column(DataTable("Stats"),param)[1];
-		iqr=::querydict["pdict"][param]["iqr"]=Column(DataTable("Stats"),param)[2];
-		t<<Close Window();
-		Close("Stats",NoSave);
-		slob<<append(medhb=VListBox());
-		medhb<<append(TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)));
-		medhb<<append(TextBox("<b> Unfiltered IQR:  </b>"||Format(iqr,"Best",7),<<Markup(1),<<SetWidth(200)));
-		
-		// Script for the graphical handles (I call them "sliders") on the spec limits
-		::rundicts[run]["pdict"][param]["script"]=eval expr(
-		
-			// Start the LSL handlle at position (.5, LSL from rundicts)
-			Handle( .5, ::querydict["pdict"][expr(param)]["LSL"],
-			
-				// Script for "as the mouse drags":
-				// Purely aesthetic, adjust the LSL in rundicts so the handle moves along with the mouse
-				Try(::querydict["pdict"][expr(param)]["LSL"]=y;)
-				,
-				// Script for "when the mouse releases":
-				// Update the LSL in rundicts and in the text box, then call User Changed Spec limits
-				// If there's an error (JMP has some race-condition bug here...), wait a sec and try again.
-				Try(
-					::querydict["pdict"][expr(param)]["LSL"]=y;
-					::querydict["pdict"][expr(param)]["lslbox"] <<set(y);
-					User Changed Spec Limits(expr(run),expr(param));
-					,					
-					Try(
-						Write("Graphics Error.\!N");
-						Wait(1);
-						::querydict["pdict"][expr(param)]["LSL"]=y;
-						::querydict["pdict"][expr(param)]["lslbox"] <<set(y);
-						User Changed Spec Limits(expr(run),expr(param));
-						Write("Recovered\!N");,
-						Write("Couldn't Recover\!N");
-					);
-				)
-			);
-			
-			// Same stuff for the USL handle
-			Handle( .5,::querydict["pdict"][expr(param)]["USL"],
-				Try(::querydict["pdict"][expr(param)]["USL"]=y;)
+			Try(
+				::rundicts[expr(run)]["USL"]=y;
+				::rundicts[expr(run)]["uslbox"] <<set(y);
+				User Changed Spec Limits(expr(run),expr(param));
 				,
 				Try(
-					::querydict["pdict"][expr(param)]["USL"]=y;
-					::querydict["pdict"][expr(param)]["uslbox"] <<set(y);
+					Write("Graphics Error.\!N");
+					Wait(1);
+					::rundicts[expr(run)]["USL"]=y;
+					::rundicts[expr(run)]["uslbox"] <<set(y);
 					User Changed Spec Limits(expr(run),expr(param));
-					,
-					Try(
-						Write("Graphics Error.\!N");
-						Wait(1);
-						::querydict["pdict"][expr(param)]["USL"]=y;
-						::querydict["pdict"][expr(param)]["uslbox"] <<set(y);
-						User Changed Spec Limits(expr(run),expr(param));
-						Write("Recovered\!N");,
-						Write("Couldn't Recover\!N");
-					);
-				)
-			);
+					Write("Recovered\!N");,
+					Write("Couldn't Recover\!N");
+				);
+			)
 		);
 	);
 );
@@ -416,49 +398,63 @@ Save Param=Function({run,param},{Default Local},
 	Filter to rundicts(run,param);
 	
 	// Short name for the relevant parameter dictionary
-	pd=::querydict["pdict"][param];
-	
-	// Ensure that dtLimits is open, and write in all our data
-	dtLimits=Open(limpath=::limsource||::querydict["limits"]||".limits.jmp";,Private);
-	r=pd["row"];
-	Column(dtLimits,"AXIS_SCALE")[r]=pd["SCALE"];
-	Column(dtLimits,"AXIS_LOW")[r]=pd["LAL"];
-	Column(dtLimits,"AXIS_HIGH")[r]=pd["UAL"];
-	Column(dtLimits,"VALID_LOW")[r]=pd["LVL"];
-	Column(dtLimits,"VALID_HIGH")[r]=pd["UVL"];
-	Column(dtLimits,"AXIS_INC")[r]=pd["INC"];
-	Column(dtLimits,"MINOR_TICKS")[r]=pd["MT"];
-	Column(dtLimits,"FORMAT")[r]=pd["FORMAT"];
-	
+	pd=::rundicts[run];
+
+	// We have to undo any inversion before we replace these values
+	// because the authoritative limits from TSMC are not inverted,
+	// and consistency is key.
 	If(pd["VALINV"],
-		Column(dtLimits,"SPEC_LOW")[r]=-pd["USL"];
-		Column(dtLimits,"SPEC_HIGH")[r]=-pd["LSL"];
+		lsl=-pd["USL"];
+		usl=-pd["LSL"];
 		,
-		Column(dtLimits,"SPEC_LOW")[r]=pd["LSL"];
-		Column(dtLimits,"SPEC_HIGH")[r]=pd["USL"];
+		lsl=pd["LSL"];
+		usl=pd["USL"];
 	);
 	
-	// Save dtLimits
-	dtLimits<<Save;
+	// Build the SQL to update UserPreferences
+	lsl=If(Is Missing(lsl),"NULL",char(lsl));
+	usl=If(Is Missing(usl),"NULL",char(usl));
+	lal=If(Is Missing(pd["LAL"]),"NULL",char(pd["LAL"]));
+	ual=If(Is Missing(pd["UAL"]),"NULL",char(pd["UAL"]));
+	lvl=If(Is Missing(pd["LVL"]),"NULL",char(pd["LVL"]));
+	uvl=If(Is Missing(pd["UVL"]),"NULL",char(pd["UVL"]));
+	inc=If(Is Missing(pd["INC"]),"NULL",char(pd["INC"]));
+	mt =If(Is Missing(pd["MT" ]),"NULL",char(pd["MT"]));
+	
+
+	sql="REPLACE INTO UserPreferences "
+			||"(`USERNAME`,`SOURCE`,`PROJECT`,`PARAM`,`VALINV`,`LAL`,`UAL`,`LVL`,`UVL`,`LSL`,`USL`,`INC`,`SCALE`,`MT`,`FORMAT`) "
+			||" VALUES ('"||pd["user"]||"','"||pd["source"]||"','"||pd["project"]||"','"||param||"',"
+			||char(pd["VALINV"])||","
+			||lal||","||ual||","||lvl||","||uvl||","||lsl||","||usl||","
+			||inc||",'"||char(pd["SCALE"])||"',"||mt||",'"||pd["FORMAT"]||"');";
+
+	// Execute the SQL
+	//dbc =  Create Database Connection("DSN=AdvDev Database");
+	Write("Cheating into Super\!N");
+	dbc =  Create Database Connection("DSN=AdvDevDB Super");
+	Execute SQL(dbc,
+		sql,
+		"PrefTable",
+		Invisible);
+	CloseDatabaseConnection(dbc);
 	
 	Write("Presumably just saved limits\!N");
 );
 
 // Runs the CPK Calculation and updates the CPK fields
 RecalcCPK=Function({run,param},{Default Local},
-	Write("Updating CPK\!N");
-	
+		
 	// Short name for the relevant parameter dictionary
-	qpd=::querydict["pdict"][param];
-	pd=::rundicts[run]["pdict"][param];
+	pd=::rundicts[run];
 	
 	// Use the summarize function to get the relevant column statistics
 	col=column(::rundicts[run]["htab"],param);
 	Summarize(mu=Mean(col),sigma=Std Dev(col));
 	
 	// Calculate values
-	cpu=(qpd["USL"]-mu)/(3*sigma);
-	cpl=(mu-qpd["LSL"])/(3*sigma);
+	cpu=(pd["USL"]-mu)/(3*sigma);
+	cpl=(mu-pd["LSL"])/(3*sigma);
 	
 	// Update fieds
 	pd["meanbox"]<<set text(Format(mu,"Best",7));
@@ -470,7 +466,7 @@ RecalcCPK=Function({run,param},{Default Local},
 Toggle Sliders=Function({run,param},{Default Local},
 
 	// Short name for the relevant parameter dictionary
-	pd=::rundicts[run]["pdict"][param];
+	pd=::rundicts[run];
 	
 	// If checkbox is "yes"...
 	If(pd["slidercheck"]<<Get(),
@@ -485,7 +481,7 @@ Toggle Sliders=Function({run,param},{Default Local},
 
 // Runs the various other update functions to ensure consistency across the interface when spec limits get changed
 User Changed Spec Limits=Function({run,param},{Default Local},
-	Write("Changing spec lims\!N");
+	
 	Axis To rundicts(run,param);
 	rundicts To Axis(run,param);
 	Update Failures(run,param);
@@ -496,25 +492,24 @@ User Changed Spec Limits=Function({run,param},{Default Local},
 Rundicts To Axis=Function({run,param},{Default Local},
 
 	// Short name for the relevant parameter dictionary
-	qpd=::querydict["pdict"][param];
-	pd=::rundicts[run]["pdict"][param];
+	pd=::rundicts[run];
 	
 	// Expression of the properties
 	props to axis=eval expr({
-		Min(expr(qpd["LAL"])),
-		Max(expr(qpd["UAL"])),
-		Inc(expr(qpd["INC"])),
-		Scale(expr(qpd["SCALE"])),
-		expr(Parse(qpd["FORMAT"])),
-		expr(eval expr(Minor Ticks(expr(qpd["MT"]))))
+		Min(expr(pd["LAL"])),
+		Max(expr(pd["UAL"])),
+		Inc(expr(pd["INC"])),
+		Scale(expr(pd["SCALE"])),
+		expr(Parse(pd["FORMAT"])),
+		expr(eval expr(Minor Ticks(expr(pd["MT"]))))
 	});	
 	
 	// If ref lines are desired, add them in as well
 	If(::rundicts[run]["showreflines"],
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(qpd["USL"]), Solid, "Black", "USL", 1)));
+			eval expr(Add Ref Line(expr(pd["USL"]), Solid, "Black", "USL", 1)));
 		insert into(props to axis,
-			eval expr(Add Ref Line(expr(qpd["LSL"]), Solid, "Black", "LSL", 1)));
+			eval expr(Add Ref Line(expr(pd["LSL"]), Solid, "Black", "LSL", 1)));
 	);
 		
 	// Send the expression to the graph
@@ -526,30 +521,28 @@ Rundicts To Axis=Function({run,param},{Default Local},
 Axis to Rundicts=Function({run,param},{Default Local},
 
 	// Short name for the relevant parameter dictionary
-	pd=::rundicts[run]["pdict"][param];
+	pd=::rundicts[run];
 
 	// Get the "axis script", throwing an error if you can't.
 	Try(
 		ax script=((pd["graph"]<<report)[axis box(3)])<<Get Script;,
 		Throw("Invalid axis limits for current data!");
 	);
-	
-	Show(ax script);
-	
+		
 	// Save values from the axis script into rundicts
-	::querydict["pdict"][param]["LAL"]=ax script["Min"];
-	::querydict["pdict"][param]["UAL"]=ax script["Max"];
-	::querydict["pdict"][param]["INC"]=ax script["Inc"];
-	::querydict["pdict"][param]["SCALE"]=ax script["Scale"];
-	::querydict["pdict"][param]["MT"]=ax script["Minor Ticks"];
+	::rundicts[run]["LAL"]=ax script["Min"];
+	::rundicts[run]["UAL"]=ax script["Max"];
+	::rundicts[run]["INC"]=ax script["Inc"];
+	::rundicts[run]["SCALE"]=ax script["Scale"];
+	::rundicts[run]["MT"]=ax script["Minor Ticks"];
 	
 	// It's a bit trickier to extract the format from axis script
 	// Cycle through ax script looking for an expression whose head is "Format()"
 	For(i=1,i<=Length(ax script),i++,
-		::querydict["pdict"][param]["FORMAT"]=
+		::rundicts[run]["FORMAT"]=
 			If(Head Expr(ax script[i])==expr(Format()),
 				Char(ax script[i]),
-				::querydict["pdict"][param]["FORMAT"]
+				::rundicts[run]["FORMAT"]
 	));
 	
 );
@@ -558,7 +551,7 @@ Axis to Rundicts=Function({run,param},{Default Local},
 Filter to Rundicts=Function({run,param},{Default Local},
 
 	// Get the "where clause" from the data filter
-	description=(::rundicts[run]["pdict"][param]["datfilt"])<< get where clause;
+	description=(::rundicts[run]["datfilt"])<< get where clause;
 	//Write(description||"\!N");
 	
 	// Regexes for extracting upper and lower limits from the where clause
@@ -575,14 +568,14 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	// does not mean to filter in that direction, so the limit should be ignored (ie use '.')
 	//
 	// "near to" = within one hundredth of an (unfiltered) IQR
-	iqr=::querydict["pdict"][param]["iqr"];
+	iqr=::rundicts[run]["iqr"];
 	If(Abs(lvl-Col Minimum(Column(::rundicts[run]["htab"],param)))<iqr/100,lvl=.);
 	If(Abs(uvl-Col Maximum(Column(::rundicts[run]["htab"],param)))<iqr/100,uvl=.);
 	
 	Write("Saving LVL: "||Char(lvl)||" UVL: "||Char(uvl)||"\!N");
 	// Save to rundicts
-	::querydict["pdict"][param]["LVL"]=lvl;
-	::querydict["pdict"][param]["UVL"]=uvl;	
+	::rundicts[run]["LVL"]=lvl;
+	::rundicts[run]["UVL"]=uvl;	
 );
 
 // Evaluate all the failure columns (eg after spec limits or filtering have changed), and fix the
@@ -594,7 +587,7 @@ Update Failures=Function({run,param},{Default Local},
 	column(::rundicts[run]["htab"],concat(param,"_FAILPCT center")) <<EvalFormula();
 	column(::rundicts[run]["htab"],concat(param,"_FAILBOOL edge")) <<EvalFormula();
 	column(::rundicts[run]["htab"],concat(param,"_FAILPCT edge")) <<EvalFormula();
-	eval(eval expr(::rundicts[run]["pdict"][param]["graph"]<<SendToReport(
+	eval(eval expr(::rundicts[run]["graph"]<<SendToReport(
 		Dispatch({},
 			expr(param||"_FAILPCT"),
 			ScaleBox,
