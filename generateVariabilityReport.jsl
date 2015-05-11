@@ -247,7 +247,7 @@ generateVariabilityReport=Function({run},{Default Local},
 							::rundicts[expr(run)]["USL"]=::rundicts[expr(run)]["uslbox"] <<get();
 							User Changed Spec Limits(expr(run),expr(param)))))),		
 				buthb=H List Box(Align(Center),
-					::rundicts[run]["slidercheck"]=CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(param))),
+					::rundicts[expr(run)]["slidercheck"]=CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(param))),
 					ButtonBox("Recalc CPK", RecalcCPK(expr(run),expr(param))),
 					ButtonBox("Save Param",Save Param(expr(run),expr(param))),
 				),
@@ -291,7 +291,7 @@ generateVariabilityReport=Function({run},{Default Local},
 
 			),
 			// Add a data filter and store a reference to it in rundicts
-			::rundicts[run]["datfilt"]=htab<<DataFilter(
+			::rundicts[expr(run)]["datfilt"]=htab<<DataFilter(
 				Set Select(0),Set Show(1),Set Include(1),
 				Add( Filter Columns(as name(expr(param)))))
 		));
@@ -430,9 +430,7 @@ Save Param=Function({run,param},{Default Local},
 			||inc||",'"||char(pd["SCALE"])||"',"||mt||",'"||pd["FORMAT"]||"');";
 
 	// Execute the SQL
-	//dbc =  Create Database Connection("DSN=AdvDev Database");
-	Write("Cheating into Super\!N");
-	dbc =  Create Database Connection("DSN=AdvDevDB Super");
+	dbc =  Create Database Connection("DSN=AdvDev Database");
 	Execute SQL(dbc,
 		sql,
 		"PrefTable",

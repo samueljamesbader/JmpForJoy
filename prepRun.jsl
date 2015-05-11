@@ -43,9 +43,9 @@ prepRun=Function({run},{Default Local},
 	eval(eval expr(col=htab << New Column(
 		failbool_colname,
 		Formula(
-			( ascolumn(expr(colname)) < ::rundicts[run]["LSL"])
+			( ascolumn(expr(colname)) < ::rundicts[expr(run)]["LSL"])
 			|
-			( ascolumn(expr(colname)) > ::rundicts[run]["USL"]) 	
+			( ascolumn(expr(colname)) > ::rundicts[expr(run)]["USL"]) 	
 		)
 	)));
 	Insert Into(cols to hide, col);
