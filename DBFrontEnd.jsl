@@ -24,7 +24,7 @@ Close All(Data Tables);
 
 // Defaults
 ::defaults=AssociativeArray();
-::defaults["source"]="FinalWATBipolar";
+::defaults["source"]="FinalWAT";
 ::defaults["project"]="Falcon";
 ::defaults["pc"]="pc17";
 ::defaults["lot"]="";
@@ -39,15 +39,15 @@ Close All(Data Tables);
 
 // This function is easiest to explain by example
 //
-// If text="pc11|pc15 | pc17" annd column="PC",
+// If text="pc11,pc15,pc17" and column="PC",
 // this returns ' ( `PC`="pc11" OR `PC`="pc15"  OR `PC`="pc17" ) '
 //
-// In other words, it takes a string of options separated by spaces or bars,
+// In other words, it takes a string of options separated by commas,
 // and returns a parenthesized listing that could be part of an SQL WHERE clause
 Generate Or Sub Clause=Function({text,column},{Default Local},
 	clause="";
 	If(text!="",
-		opts=Words(text," |");
+		opts=Words(text,",");
 		For(i=1,i<=NItems(opts),i++,
 			If(opts[i]!="",
 				If(clause=="",
@@ -208,17 +208,24 @@ prepWaferMapStuff=Function({tbl,wafermap},{Default Local},
 // Update ParamBox (the big list of parameter names on the left)
 Update ParamBox=Function({},
 
+	subclauses=EvalList({
+		GenerateOrSubClause(projectbox<<gettext(),"PROJECT"),
+		GenerateOrSubClause(sourcebox<<gettext(),"SOURCE")
+		});
+	whereclause=GenerateWhereClause(subclauses);
+
 	// Get the list of columns for this project+source
 	dbc =  Create Database Connection("DSN=AdvDev Database");
-	desc=Execute SQL(dbc,"Describe "||(sourcebox<<gettext())
-		||"$"||(projectbox<<gettext())||";","ParamsList",Invisible);
+	
+	desc=Execute SQL(dbc,"SELECT DISTINCT(PARAM) FROM `Measurements` "||whereclause||" ORDER BY `PARAM`;",
+		"ParamsList",Invisible);
 	CloseDatabaseConnection(dbc);
 	
 	// If the SQL sucessfully returned a table
 	If(Try(Not(Is Missing(desc)),1),
 	
 		// Take that list, and remove the known non-test columns
-		all params=column(desc,"Field")<<Get Values;
+		all params=column(desc,"PARAM")<<Get Values;
 		Close(desc,NoSave);
 		For( ntc=1, ntc<=NItems(::nontestcolumns),ntc++,
 			Remove From(all params,Contains(all params,::nontestcolumns[ntc]));
@@ -265,9 +272,9 @@ eval(eval expr(New Window("JmpForJoy",
 					TextBox("<b>Parameters to query</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
 									
 					HListBox(BorderBox(Bottom(5),TextBox("Source: ",<<Set Width(55))),
-							sourcebox=TextEditBox(::defaults["source"],<<Set Width(150))),
+							sourcebox=TextEditBox(::defaults["source"],<<Set Width(150),<<SetScript(UpdateParamBox()))),
 					HListBox(BorderBox(Bottom(5),TextBox("Project: ",<<Set Width(55))),
-							projectbox=TextEditBox(::defaults["project"],<<Set Width(150))),
+							projectbox=TextEditBox(::defaults["project"],<<Set Width(150),<<SetScript(UpdateParamBox()))),
 							
 					// Button to update parambox without redownloading data
 					ButtonBox("Refresh parameter list from table",
@@ -383,15 +390,12 @@ eval(eval expr(New Window("JmpForJoy",
 						
 							// Generate the which columns part of the SQL query from ParamBox
 							params=parambox<<get selected();
-							paramtext="*";
-							If(NItems(params),
-								paramtext="`"
-									||Concat Items(Remove(::nontestcolumns,Contains(::nontestcolumns,"LOADDATE")),"`, `")
-									||"`, `"||Concat Items(params,"`,`")||"`";
-							);
 							
 							// Generate the WHERE part of the SQL query based on the data source inputs
 							subclauses=EvalList({
+								GenerateOrSubClause(projectbox<<gettext(),"PROJECT"),
+								GenerateOrSubClause(sourcebox<<gettext(),"SOURCE"),
+								GenerateOrSubClause(Concat Items(params,","),"PARAM"),
 								GenerateOrSubClause(pcbox<<gettext(),"PC"),
 								GenerateOrSubClause(lotbox<<gettext(),"LOT"),
 								GenerateOrSubClause(waferbox<<gettext(),"WAFER")
@@ -399,8 +403,7 @@ eval(eval expr(New Window("JmpForJoy",
 							whereclause=GenerateWhereClause(subclauses);
 							
 							// Put the whole query together
-							querybox<<set text("SELECT "||paramtext||" from `"||(sourcebox<<get text())||"$"
-								||(projectbox<<get text())||"`"||whereclause||";");
+							querybox<<set text("SELECT * from `Measurements` "||whereclause||";");
 							
 							// If "Run on Generate" is selected, click the "Run Query" button
 							If(runongeneratebox<<get(),eval(runquerybox<<getfunction));
@@ -416,11 +419,30 @@ eval(eval expr(New Window("JmpForJoy",
 						
 							// Get the query results, keep them invisible if "Invisible" is selected
 							dbc =  Create Database Connection("DSN=AdvDev Database");
-							If(invisiblebox<<get,
-								qr=Execute SQL(dbc,querybox<<get text(),"Query Results",Invisible);,
-								qr=Execute SQL(dbc,querybox<<get text(),"Query Results");
+							qr raw=Execute SQL(dbc,querybox<<get text(),"Query Results Raw",Invisible);
+							Try(
+								If(invisiblebox<<get,
+									qr= qr raw << split(
+										Split By( :PARAM ),
+										Split( :VALUE ),
+										Group( :SOURCE, :LOT, :WAFER, :SITE ),
+										Output Table( "Query Results" ),
+										Invisible
+									);
+									,
+									qr= qr raw << split(
+										Split By( :PARAM ),
+										Split( :VALUE ),
+										Group( :SOURCE, :LOT, :WAFER, :SITE ),
+										Output Table( "Query Results" )
+									);
+								);
+								,
+								Throw("Couldn't split the query table... please make sure your query "
+									||" includes the columns SOURCE, LOT, WAFER, SITE, and PARAM.")	
 							);
 							CloseDatabaseConnection(dbc);
+							Close(qr raw, NoSave);
 							
 							// If the SQL successfully returned a table
 							If(Try(Not(Is Missing(qr)),1),

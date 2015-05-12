@@ -550,11 +550,10 @@ Filter to Rundicts=Function({run,param},{Default Local},
 
 	// Get the "where clause" from the data filter
 	description=(::rundicts[run]["datfilt"])<< get where clause;
-	//Write(description||"\!N");
 	
 	// Regexes for extracting upper and lower limits from the where clause
-	lpat=":(?:Name\( \!")*"||param||"(?:\!" \))* >=+ ([\d\.e\+\-]+)";
-	upat=":(?:Name\( \!")*"||param||"(?:\!" \))* <=+ ([\d\.e\+\-]+)";
+	lpat=":(?:Name\(\s*\!")*"||param||"(?:\!"\s*\))*\s*>=+\s*([\d\.e\+\-]+)";
+	upat=":(?:Name\(\s*\!")*"||param||"(?:\!"\s*\))*\s*<=+\s*([\d\.e\+\-]+)";
 	
 	// Try the regexes.  If they succeed, use the extracted values, otherwise use '.'
 	lvlmatch=Regex Match(description,lpat);

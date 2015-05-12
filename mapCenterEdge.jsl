@@ -4,13 +4,11 @@
 ///
 // Here you list, for the pc17 WAT wafermap, all of the EDGE COORDINATES.
 ///
-::CE Maps["FinalWATCMOS-Falcon-pc17"]=Associative Array(
+::CE Maps["FinalWAT-Falcon-pc17"]=Associative Array(
 	{"0_-3" ,"1_-3" ,"2_-2" ,"3_-1" ,"3_0"  ,"3_1"  ,"2_2"  ,
 	 "2_3"  ,"1_3"  ,"0_4"  ,"-1_4" ,"-2_3" ,"-3_3", "-3_2" ,
 	 "-4_1" ,"-4_0" ,"-4_-1","-3_-2","-3_-2","-2_-3","-1_-3" });
-::CE Maps["FinalWATBipolar-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
-::CE Maps["M3WATCMOS-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
-::CE Maps["M3WATBipolar-Falcon-pc17"]=::CE Maps["FinalWATCMOS-Falcon-pc17"];
+::CE Maps["M3WAT-Falcon-pc17"]=::CE Maps["FinalWAT-Falcon-pc17"];
 
 
 ///
@@ -18,10 +16,8 @@
 ///
 // These WAT pc15 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!
 Write("THESE pc15 Center-Edge mappings are TOTALLY MADE UP and likely wrong!!!!\!N");
-::CE Maps["FinalWATBipolar-Falcon-pc15"]=Associative Array({"."});
-::CE Maps["FinalWATCMOS-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
-::CE Maps["M3WATCMOS-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
-::CE Maps["M3WATBipolar-Falcon-pc15"]=::CE Maps["FinalWATBipolar-Falcon-pc15"];
+::CE Maps["FinalWAT-Falcon-pc15"]=Associative Array({"."});
+::CE Maps["M3WAT-Falcon-pc15"]=::CE Maps["FinalWAT-Falcon-pc15"];
 
 
 ///	 
