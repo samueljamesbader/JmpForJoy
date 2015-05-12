@@ -156,13 +156,12 @@ AddSplits=Function({tbl,splitsfile,invisible},{Default Local},
 );
 
 
-// Downloads the wafermap from the website if possible.
 // Creates a COORD_CAT column and links it to the wafermap
 // Also creates the ColorMap column which declares a site "Center"/"Edge"
 // based on mapCenterEdge.jsl, and colors the rows by that column
 prepWaferMapStuff=Function({tbl,wafermap},{Default Local},	
 
-	// Download the wafermaps if possible
+	/*// Download the wafermaps if possible
 	Try(
 		nameF=Open("http://extfnddb01.adsdesign.analog.com/wafermaps/"||wafermap|| "-Name.jmp",Private);	
 		nameF<<Save(::scriptdir || "wafermaps/" || wafermap || "-Name.jmp");
@@ -173,7 +172,7 @@ prepWaferMapStuff=Function({tbl,wafermap},{Default Local},
 		,
 		Write("Couldn't download wafermap:\!N");
 		Write(exception_msg||"\!N");
-	);
+	);*/
 
 	// Create a character column by concatenating the coordinates.
 	// This column will be used in a look-up to determine whether we are center or edge,
@@ -246,12 +245,44 @@ recount=Function({},
 // If there is a selection in ParamBox, bring it over,
 // Otherwise, bring over everything.
 Update Plot Parambox=Function({},
-	If(NItems(parambox<<get selected()),
-		plotparambox<<set items(parambox<<get selected());
-		,
-		plotparambox<<set items(parambox<<get items());
+	pcols=Data Table(querytablebox<<gettext)<<get labeled columns;
+	params={};
+	For(p=1,p<=NItems(pcols),p++,
+		Insert into(params,pcols[p]<<get name)
 	);
-	plotparambox<<set selected(1,1);
+	
+	plotparambox<<set items(params);
+	plotparambox<<set selected(1);
+);
+
+Wildcard Selection=Function({},
+	mode=regexoptions<<get selected();
+	pattern="^"||substitute(regexbox<<get text(),"*",".*")||"$";
+	items=parambox<< get items;
+	cur selection=parambox<< get selected indices;
+	
+	// Cycle through the items in the listbox
+	For(i=1,i<Length(items),i++,
+	
+		// True iff the regex matches the current item
+		doesmatch=Not(Is Missing(Regex(items[i],pattern)));
+		
+		// True iff the item is already selected
+		alreadysel=Contains(cur selection, i)>0;
+		
+		// "Extend" mode selects if matches or already selected
+		// "Replace" mode selects only if it matches
+		// "Subset" mode selects only if it matches and was already selected
+		parambox<<Set Selected(i,
+			((mode=="Extend")  &(doesmatch | alreadysel)) |
+			((mode=="Replace") &(doesmatch)) |
+			((mode=="Subset")  &(doesmatch & alreadysel))
+		);
+		
+	);
+	
+	// Make sure to update the count
+	recount();
 );
 
 /////
@@ -288,44 +319,16 @@ eval(eval expr(New Window("JmpForJoy",
 					
 					VListBox(
 						TextBox("Parameter Selection Regex:  "),
-						regexbox=TextEditBox("", <<Set Width(225)),
+						regexbox=TextEditBox("", <<Set Width(225),<<SetScript(WildcardSelection())),
 						HListBox(
 							BorderBox(Top(7),
-							regexoptions=Radiobox({"Extend","Replace","Subset"})),
+							regexoptions=Radiobox({"Replace","Extend","Subset"})),
 							BorderBox(Left(70),
 							VListBox(Align(Right),
 								HListBox(TextBox("Num Selected:"),
 								numselbox=TextBox("10000")),
 								// Button to do the regex-based updating of parambox
-								ButtonBox("Regex Selection",
-									mode=regexoptions<<get selected();
-									pattern=regexbox<<get text();
-									items=parambox<< get items;
-									cur selection=parambox<< get selected indices;
-									
-									// Cycle through the items in the listbox
-									For(i=1,i<Length(items),i++,
-									
-										// True iff the regex matches the current item
-										doesmatch=Not(Is Missing(Regex(items[i],pattern)));
-										
-										// True iff the item is already selected
-										alreadysel=Contains(cur selection, i)>0;
-										
-										// "Extend" mode selects if matches or already selected
-										// "Replace" mode selects only if it matches
-										// "Subset" mode selects only if it matches and was already selected
-										parambox<<Set Selected(i,
-											((mode=="Extend")  &(doesmatch | alreadysel)) |
-											((mode=="Replace") &(doesmatch)) |
-											((mode=="Subset")  &(doesmatch & alreadysel))
-										);
-										
-									);
-									
-									// Make sure to update the count
-									recount();
-								),
+								wildcardsel=ButtonBox("Wildcard Selection",WildcardSelection()),
 								// Button to clear the selection and recount
 								ButtonBox("Clear Selection",parambox<<clear selection();recount();),
 							))
@@ -390,6 +393,9 @@ eval(eval expr(New Window("JmpForJoy",
 						
 							// Generate the which columns part of the SQL query from ParamBox
 							params=parambox<<get selected();
+							If(NItems(params)==0,
+								Throw("Select some parameters!\!N(On the left...)")
+							);
 							
 							// Generate the WHERE part of the SQL query based on the data source inputs
 							subclauses=EvalList({
@@ -402,8 +408,22 @@ eval(eval expr(New Window("JmpForJoy",
 								});
 							whereclause=GenerateWhereClause(subclauses);
 							
+							// Append the project and/or source to the parameter name if selecting
+							// multiple project and/or sources.
+							collist="*";
+							If(Contains(projectbox<<gettext(),","),
+								collist="*, CONCAT(PARAM,\!"_\!",PROJECT) AS PARAMETER";
+							);
+							If(Contains(sourcebox<<gettext(),","),
+								collist="*, CONCAT(PARAM,\!"_\!",SOURCE) AS PARAMETER";
+							);
+							If(And(Contains(projectbox<<gettext(),","),Contains(sourcebox<<gettext(),",")),
+								collist="*, CONCAT(PARAM,\!"_\!",PROJECT,SOURCE) AS PARAMETER";
+							);							
+							
 							// Put the whole query together
-							querybox<<set text("SELECT * from `Measurements` "||whereclause||";");
+							querybox<<set text("SELECT "||collist
+								||" from `Measurements` "||whereclause||";");
 							
 							// If "Run on Generate" is selected, click the "Run Query" button
 							If(runongeneratebox<<get(),eval(runquerybox<<getfunction));
@@ -417,26 +437,39 @@ eval(eval expr(New Window("JmpForJoy",
 						// Button to run the query, and update parameter listing
 						runquerybox=ButtonBox("Run Query",
 						
-							// Get the query results, keep them invisible if "Invisible" is selected
+							// Get the query results, keep them invisible
 							dbc =  Create Database Connection("DSN=AdvDev Database");
 							qr raw=Execute SQL(dbc,querybox<<get text(),"Query Results Raw",Invisible);
+							// Rename PARAMETER column (if exists) overwriting PARAM
 							Try(
-								If(invisiblebox<<get,
+								Column(qr raw,"PARAMETER");
+								qr raw <<Delete Columns(PARAM);
+								Column(qr raw,"PARAMETER")<<Set Name("PARAM");
+							);
+							
+							
+							Try(
+								visibility=If(invisiblebox<<get(),"Invisible","Visible");
+								// Split based on param
+								Eval(EvalExpr(
 									qr= qr raw << split(
 										Split By( :PARAM ),
 										Split( :VALUE ),
 										Group( :SOURCE, :LOT, :WAFER, :SITE ),
 										Output Table( "Query Results" ),
-										Invisible
-									);
-									,
-									qr= qr raw << split(
-										Split By( :PARAM ),
-										Split( :VALUE ),
-										Group( :SOURCE, :LOT, :WAFER, :SITE ),
-										Output Table( "Query Results" )
+										name expr(visibility)
+								)));
+								
+								// Group the parameter columns (ie those which didn't exist in raw)
+								cols in raw=qr raw<<get column names(String);
+								cols in result=qr <<get column names(String);
+								For (c=1,c<=NItems(cols in result),c++,
+									If(Not(Contains(cols in raw,cols in result[c])),
+										//(cols in result[c])<<Add column properties(Notes("Parameter"));
+										Column(qr,cols in result[c]) << Label(1);
 									);
 								);
+								
 								,
 								Throw("Couldn't split the query table... please make sure your query "
 									||" includes the columns SOURCE, LOT, WAFER, SITE, and PARAM.")	
@@ -560,7 +593,7 @@ eval(eval expr(New Window("JmpForJoy",
 					BorderBox(Left(10),VListBox(
 						HListBox(
 							TextBox("Use: "),
-							querytablebox=TextEditBox("",<<Set Width(135))
+							querytablebox=TextEditBox("",<<Set Width(135),<<SetScript(UpdatePlotParamBox()))
 						),
 						TextBox("Plot Parameter (select one):"),
 						plotparambox=ListBox({},width(161),nlines(6),<<Set Max Selected(1));

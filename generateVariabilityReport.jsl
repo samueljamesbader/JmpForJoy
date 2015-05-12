@@ -32,7 +32,7 @@ generateVariabilityReport=Function({run},{Default Local},
 	t<<Close Window();
 	Close("Stats",NoSave);
 		
-	
+		
 	// If special analysis, then open a column dialog for the user to vary the analysis
 	If(::rundicts[run]["specialanalysis"],
 	
@@ -52,8 +52,7 @@ generateVariabilityReport=Function({run},{Default Local},
 		xgroupers= List(:LOT);
 	);
 	
-	
-	
+		
 	// Create the window
 	win=New Window(param, vb=V List Box());
 	
@@ -216,6 +215,7 @@ generateVariabilityReport=Function({run},{Default Local},
 		)
 	);
 	
+	
 	// Build the graph, set preferences, and store a reference to it in rundicts
 	eval(eval expr(vb<<append(graph=expr(name expr(vargraph)))));
 	(graph<<report())<<set title(param);
@@ -224,10 +224,10 @@ generateVariabilityReport=Function({run},{Default Local},
 	
 	// Apply the axis properties from rundicts to the axis
 	Rundicts To Axis(run,param);
-	
+		
 	// Make sure the failure plot is up-to-date
 	Update Failures(run,param);
-			
+				
 	// Build the addtional interface below
 	eval(eval expr((graph<<report())<<append(
 		HListBox(
@@ -493,6 +493,7 @@ Rundicts To Axis=Function({run,param},{Default Local},
 	pd=::rundicts[run];
 	
 	// Expression of the properties
+	//props to axis={Min(1e-12)};
 	props to axis=eval expr({
 		Min(expr(pd["LAL"])),
 		Max(expr(pd["UAL"])),
@@ -502,6 +503,7 @@ Rundicts To Axis=Function({run,param},{Default Local},
 		expr(eval expr(Minor Ticks(expr(pd["MT"]))))
 	});	
 	
+	
 	// If ref lines are desired, add them in as well
 	If(::rundicts[run]["showreflines"],
 		insert into(props to axis,
@@ -509,10 +511,16 @@ Rundicts To Axis=Function({run,param},{Default Local},
 		insert into(props to axis,
 			eval expr(Add Ref Line(expr(pd["LSL"]), Solid, "Black", "LSL", 1)));
 	);
-		
+	
+	Show(eval expr(pd["graph"]<<SendToReport(
+		Dispatch({}, expr(param), ScaleBox,	expr(props to axis)))));
+	
+
 	// Send the expression to the graph
 	eval(eval expr(pd["graph"]<<SendToReport(
 		Dispatch({}, expr(param), ScaleBox,	expr(props to axis)))));
+	
+	
 );
 
 // Reads values from the axis and saves them to rundicts
