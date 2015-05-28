@@ -1,6 +1,9 @@
-/////
+// This is the main script for JmpForJoy.
+// Just run this script to launch everything.
+
+//////////////////////////////////////////////////
 // Program boilerplate
-/////
+//////////////////////////////////////////////////
 
 // Use the local namespace
 Names Default To Here(1);
@@ -9,78 +12,290 @@ Names Default To Here(1);
 Close All(Reports);
 Close All(Data Tables);
 
-/////
+//////////////////////////////////////////////////
 // Globals
-/////
+//////////////////////////////////////////////////
 
 // Global directory locations
 ::scriptdir=Get Default Directory();
 
-// Columns to not treat as parameters
-::nontestcolumns={"PROJECT","SOURCE","PC","LOT","WAFER","SITE","XCOORD","YCOORD","TESTDATE","LOADDATE"};
-
-// Store run-specific globals for each run in rundicts
+// Store run-specific data for each run in rundicts
 ::rundicts={};
 
-// Defaults
-::defaults=AssociativeArray();
-::defaults["source"]="FinalWAT";
-::defaults["project"]="Falcon";
-::defaults["pc"]="pc17";
-::defaults["lot"]="";
-::defaults["wafer"]="";
-::defaults["splits"]="splits\samtestsplits.xlsx";
-::defaults["wafermap"]="pc17_WAT";
-::defaults["user"]="";
-
-/////
+//////////////////////////////////////////////////
 // Utitilities for generating SQL
-/////
+//////////////////////////////////////////////////
 
-// This function is easiest to explain by example
+// Generates an OR clause as part of an SQL WHERE
+// ...this function is easiest to explain by example:
 //
 // If text="pc11,pc15,pc17" and column="PC",
 // this returns ' ( `PC`="pc11" OR `PC`="pc15"  OR `PC`="pc17" ) '
 //
-// In other words, it takes a string of options separated by commas,
-// and returns a parenthesized listing that could be part of an SQL WHERE clause
+// In other words, it takes a string of comma-separated options,
+// and returns a parenthesized listing that could be part of an
+// SQL WHERE clause.
 Generate Or Sub Clause=Function({text,column},{Default Local},
 	clause="";
 	If(text!="",
+	
+		// Break the text up by commas
 		opts=Words(text,",");
+		
+		// Iterate through
 		For(i=1,i<=NItems(opts),i++,
+		
+			// (Ignore blank options)
 			If(opts[i]!="",
+			
+				// If this is the first one, put an opening parenthesis
 				If(clause=="",
 					clause=" ( `"||column||"`=\!""||(opts[i])||"\!" ";,
+					
+					// Otherwise, put an OR and the current option
 					clause=clause||" OR `"||column||"`=\!""||(opts[i])||"\!" ";
 				);
 			);						
 		);
-		If(text!="",clause=clause||") ");
+		
+		// If we did actually add some option in, then close the parenthesis
+		If(clause!="",clause=clause||") ");
 	);
+	
+	// Return the clause
 	clause;
 );
 
 // Combines the subclauses with AND's to make an SQL WHERE clause
-// subclauses is a list of strings of the sort which Generate Or Sub Clauses returns.
-// Blank strings are okay and will be ignored
+// subs is a list of [strings which GenerateOrSubClause() returns].
+// Blank strings are okay and will be ignored.
 Generate Where Clause=Function({subs},{Default Local},
 	clause="";
+	
+	// Iterate through the restrictions
 	For(i=1,i<=NItems(subs),i++,
+	
+		// (Ignore blank ones)
 		If(subs[i]!="",
+		
+			// If it's the first one, put a WHERE
 			If(clause=="",
 				clause=" WHERE "||subs[i];,
+				
+				// Otherwise, put an AND and the next restriction
 				clause=clause||" AND "||subs[i];
 			);
 		);
 	);
+	
+	// Return the clause
 	clause;
 );
 
+// Generates the SQL query based on the various text and check boxes
+// Runs it if "Run now" is selected.
+GenerateQuery=Function({},
 
-/////
-// Utilities for modifying the query table
-/////
+	// If the "Close previous" is selected, close the previous query
+	If(closeprevbox<<get(),
+		Try(Close(DataTable(querytablebox<<gettext()),NoSave)););
+
+	// Make sure we have parameters to query
+	params=parambox<<get selected();
+	If(NItems(params)==0,
+		Throw("Select some parameters!\!N(On the left...)")
+	);
+	
+	// Generate the WHERE part of the SQL query based on the data source inputs
+	subclauses=EvalList({
+		GenerateOrSubClause(Substitute(projectbox<<gettext()," ",""),"PROJECT"),
+		GenerateOrSubClause(Substitute(sourcebox<<gettext()," ",""),"SOURCE"),
+		GenerateOrSubClause(Concat Items(params,","),"PARAM"),
+		GenerateOrSubClause(Substitute(pcbox<<gettext()," ",""),"PC"),
+		GenerateOrSubClause(Substitute(lotbox<<gettext()," ",""),"Lots`.`LOTID"),
+		GenerateOrSubClause(Substitute(waferbox<<gettext()," ",""),"WAFER")});
+	whereclause=GenerateWhereClause(subclauses);
+	
+	// If selecting multiple sources, append the source to the parameter name
+	// in the column list.
+	If(Contains(sourcebox<<gettext(),","),
+		paramcol="CONCAT(PARAM,\!" | \!",SOURCE) AS PARAM"
+		,
+		paramcol="PARAM";
+	);
+	collist="PROJECT, PC, Lots.LOTID as LOT, WAFER, SITE AS `UNIVERSAL SITE`,"
+		||" XCOORD, YCOORD, TESTDATE, "||paramcol||", VALUE";
+	
+	// Put the whole query together
+	querybox<<set text("SELECT "||collist
+		||" from Lots JOIN Loads on Lots.LOTID=Loads.LOTID"
+		||" JOIN "||(defaults["datatable"])||" on Loads.LOADID="||(defaults["datatable"])||".LOADID "
+		||whereclause||";");
+	
+	// If "Run on Generate" is selected, click the "Run Query" button
+	If(runongeneratebox<<get(),eval(runquerybox<<getfunction));
+);
+
+//////////////////////////////////////////////////
+// Utilities for retreiving and modifying the query table
+//////////////////////////////////////////////////
+
+// Runs the query in Query box, cleans the date column, splits the data,
+// and then processes it through the other utilities (below) to add splits and maps.
+RunQuery =Function({},
+
+	// Get the query results
+	dbc =  Create Database Connection("DSN=AdvDev Database");
+	Eval(EvalExpr(qr raw=Execute SQL(dbc,querybox<<get text(),
+		"Query Results Raw",
+		// (Keep *raw* results invisible if pulling from Measurements
+		// because, in this case, we're about to do a lot more processing.)
+		Expr(If(defaults["datatable"]=="Measurements",Expr(Invisible))))));
+	CloseDatabaseConnection(dbc);
+	
+	// Make sure we got something
+	If(NRows(qr raw)==0,
+		Throw("No results found!");
+	);
+	
+	// If we're pulling from Measurements, process the table for the user's convenience
+	If(defaults["datatable"]=="Measurements",
+		Try(
+			// So the points can jitter.
+			:WAFER << Set Modeling Type(Nominal);
+			
+			// If I have an zero date in the database, JMP reads it as the below date
+			// I want JMP to put a '.' instead.
+			For each row(
+				JMP Invalid Date=ParseDate("12/31/1969 7:00:00 PM");
+				If( :TESTDATE==JMP Invalid Date, :TESTDATE=.);
+			);
+			
+			// If the splitdev option is selected, then break the :PARAM column into
+			// two columns, :DEVICE and :PARAM, by breaking at the first space.
+			// Then use the :DEVICE column in the grouping when we split this data
+			If(splitdevbox<<get(),
+			
+				// DEVICE is the part of the name before a space
+				qr raw<<New Column("DEVICE",Character,<<Formula(Word(1,:PARAM)));
+				
+				// PARAM2 is the part of the name after the first space
+				qr raw<<New Column("PARAM2",Character,<<Formula(ConcatItems(Remove(Words(:PARAM),1)," ")));
+				
+				// Remove the formulas so we can delete the column from which they source
+				:DEVICE<<Delete Formula;
+				:PARAM2<<Delete Formula;
+				
+				// Remove :PARAM, and rename :PARAM2 to :PARAM
+				qr raw<<Delete Columns(:PARAM);
+				:PARAM2<<Set Name("PARAM");
+				
+				// If we made a DEVICE column, we'll use it in the split
+				split grouping=expr(Group(:LOT, :WAFER, :UNIVERSALSITE, :DEVICE ));
+				,
+				split grouping=expr(Group(:LOT, :WAFER, :UNIVERSALSITE ));
+			);
+			// Note that the grouping uses the UNIVERSAL SITE column, not the xcoord/ycoord columns
+			// (which are subject to different coordinate conventions in TSMC vs in-house measurements)
+			
+			// Split based on param
+			Eval(EvalExpr(
+				qr= qr raw << split(
+					Split By( :PARAM ),
+					Split( :VALUE ),
+					expr(nameexpr(split grouping)),
+					Output Table( "Query Results" ),
+					expr(If(invisiblebox<<get(),expr(Invisible),expr(Visible)))
+			)));
+			
+			// Label the parameter columns (ie those which didn't exist in raw)
+			// The rest of the code will treat only labelled columns as parameters
+			cols in raw=qr raw<<get column names(String);
+			cols in result=qr <<get column names(String);
+			For (c=1,c<=NItems(cols in result),c++,
+				If(Not(Contains(cols in raw,cols in result[c])),
+					Column(qr,cols in result[c]) << Label(1);
+				);
+			);
+			
+			// If selecting from sources which have different coordinate conventions, then, once the data is
+			// split based on universal site, the non-universal xcoord and ycoord are meaningless (because
+			// two values in the same row which are from the same universal site might have different xcoord
+			// and ycoord values if they're from different sources.
+			sourcetext=sourcebox<<gettext;
+			If(And(Contains(sourcetext,"WAT"),Or(Contains(sourcetext,"Keithley"),Contains(sourcetext,"SParam"))),
+				:XCOORD << Set Hidden;
+				:YCOORD << Set Hidden;
+			);
+			
+			// Move the UNIVERSAL SITE column to the end, because, in general, people will be interested in
+			// XCOORD and YCOORD for knowing which sites are defective, and I don't want them getting confused
+			// by this "extra"" coordinate column.
+			qr<<Move Selected Columns({:UNIVERSALSITE},To Last);
+			
+			,
+			
+			// If something above failed, blame the query and yell at the user.  If, in the process of debugging,
+			// you get this message and can't figure out why, it could be helpful to comment away the TRY/CATCH
+			// to see the true error message.
+			Throw("Couldn't split the query table... please make sure your query "
+				||" includes the columns PROJECT, PC, LOT, WAFER, SITE (AS `UNIVERSAL SITE`), PARAM, and VALUE.")	
+		);
+		// If we've made it this far (succeeded in the splitting), close the raw results
+		Close(qr raw, NoSave);
+
+		// If the above SQL successfully split a table
+		If(Try(Not(Is Missing(qr)),1),
+		
+			// Add limits to column properties, bring in splits, add wafermap info
+			AuthLimitsToColProps(qr);
+			qr=AddSplits(qr,::scriptdir||(splitsbox<<gettext()),invisiblebox<<get);
+			prepWaferMapStuff(qr,(wafermapbox<<gettext()));
+			
+			// Update the query table name and the plot parambox
+			querytablebox<<set text(qr<<Get Name());
+			Update Plot ParamBox();
+		);
+	);
+);
+
+// Brings the Authoritative spec limits into the properties of the parameter columns of Table tbl
+AuthLimitsToColProps=Function({tbl},{Default Local},
+
+	// Get the limits
+	dbc =  Create Database Connection("DSN=AdvDev Database");
+	authlims=Execute SQL(dbc,"SELECT PARAM,LSL,USL FROM UserPreferences WHERE USERNAME='Authoritative';", Invisible);
+	CloseDatabaseConnection(dbc);
+	
+	// Get the pure names from the parameter columns (ie without the "|SOURCE" part)
+	paramcols=tbl<<Get Labeled Columns;
+	paramnames={};
+	For(pc=1,pc<=NItems(paramcols),pc++,
+		Insert Into(paramnames,Regex match(HeadName(paramcols[pc]),"^([^|]*)(?: \|)?[^\|]*$")[2]));
+	
+	// Go once through the list of retreived params
+	For Each Row(
+	
+		// And whenever one matches our columns,
+		pos=Contains(paramnames,:PARAM);
+		While(pos,
+		
+			// Add it to the column properties
+			Eval(EvalExpr(Column(tbl,HeadName(paramcols[pos]))
+				<<Set Property("Spec Limits",{LSL(expr(:LSL)),USL(expr(:USL))})));
+			
+			// And take this param out of our current list
+			Remove From(paramnames,pos);
+			Remove From(paramcols,pos);
+			
+			// For the while loop to check if there's still a parameter with this name in the list
+			pos=Contains(paramnames,:PARAM);
+		);
+	);
+	
+	// Close the table of authoritative limits
+	Close(authlims,NoSave);
+);
 
 // Joins a Table tbl with the splits information in splitsfile.
 // First it checks that splitsfile exists and contains the necessary columns
@@ -117,15 +332,16 @@ AddSplits=Function({tbl,splitsfile,invisible},{Default Local},
 			If(contains(splittab columns,"Full Lot")
 				&  contains(splittab columns,"Wafer"),
 			
-				// Delete the base lot column if it exists
+				// Delete the "base lot"" column if it exists
+				// (This was a column used in earlier versions of JmpForJoy, and
+				// change-resistant users may still include it ...)
 				base lot col num=Contains(splittab columns,"Base Lot");
 				If (base lot col num,
 					Remove From(splittab columns,base lot col num);
 					splittab<<Delete Column(Base Lot);
 				);				
-			
 
-				// Merge the tables, and close the component tables
+				// Merge the tables, and close the old data table
 				Column(splittab,"Full Lot")<<Set Name("LOT");
 				Column(splittab,"Wafer")<<Set Name("WAFER");
 				eval(evalexpr(newtbl=tbl << Join(
@@ -143,46 +359,33 @@ AddSplits=Function({tbl,splitsfile,invisible},{Default Local},
 				tbl=newtbl;
 				,
 				
-				// If necessary columns are missing, let the user know
+				// Or if necessary columns were missing, let the user know
 				Write("Splits table incorrectly formatted!\!N");,
 			);
 			Close(splittab, No Save);
 			,
-			// If the file doesn't exist, output the notice
+			// Or if the file doesn't exist, output the notice
 			Write("Splits file not found!\!N");
 		);
 	);
+	
+	// Return the merged table
 	tbl;
 );
 
 
-// Creates a COORD_CAT column and links it to the wafermap
+// Link :UNIVERSAL SITE to the wafermap for Map Role purposes
 // Also creates the ColorMap column which declares a site "Center"/"Edge"
 // based on mapCenterEdge.jsl, and colors the rows by that column
 prepWaferMapStuff=Function({tbl,wafermap},{Default Local},	
 
-	/*// Download the wafermaps if possible
-	Try(
-		nameF=Open("http://extfnddb01.adsdesign.analog.com/wafermaps/"||wafermap|| "-Name.jmp",Private);	
-		nameF<<Save(::scriptdir || "wafermaps/" || wafermap || "-Name.jmp");
-		nameF<<Close(NoSave);
-		xyF=Open("http://extfnddb01.adsdesign.analog.com/wafermaps/"||wafermap|| "-XY.jmp",Private);	
-		xyF<<Save(::scriptdir || "wafermaps/" || wafermap || "-XY.jmp");
-		xyF<<Close(NoSave);	
-		,
-		Write("Couldn't download wafermap:\!N");
-		Write(exception_msg||"\!N");
-	);*/
-
 	// Create a character column by concatenating the coordinates.
 	// This column will be used in a look-up to determine whether we are center or edge,
 	// and will be the "Shape Name Use" column if we want to plot on a wafer map.
-	eval(eval expr(qr << New Column("Coord_CAT", Character,Formula(Char(:XCOORD) || "_" || Char(:YCOORD)),
-		Set Property(
+	Eval(EvalExpr(Column(tbl,"UNIVERSAL SITE")<< Set Property(
 			"Map Role", Map Role(Shape Name Use(
 				expr(::scriptdir || "wafermaps/" || wafermap || "-Name.jmp"),
-				"COORDS")))
-	)));
+				"COORDS")))));
 	
 	// Get the center-edge look-up dictionary for this wafermap
 	include(::scriptdir||"mapCenterEdge.jsl");
@@ -190,7 +393,7 @@ prepWaferMapStuff=Function({tbl,wafermap},{Default Local},
 	// Make a new column which just states "center" or "edge" based on the previous columns
 	eval( eval expr(
 		tbl<< New Column("ColorMap", Character, Nominal,
-			Formula(if(::CEMaps[:Source||"-"||:Project||"-"||:PC][:COORD_CAT],"Edge","Center")))));
+			Formula(if(::CEMaps[:Project||"-"||:PC][:UNIVERSALSITE],"Edge","Center")))));
 	
 	// Use that new column to color the rows
 	(tbl << Select Where( :ColorMap == "Center"))<<Colors("Red");
@@ -200,69 +403,92 @@ prepWaferMapStuff=Function({tbl,wafermap},{Default Local},
 );
 
 
-/////
+//////////////////////////////////////////////////
 // Utilities for the GUI
-/////
+//////////////////////////////////////////////////
 
 // Update ParamBox (the big list of parameter names on the left)
 Update ParamBox=Function({},
 
+	// Subclauses to select for this project and source
 	subclauses=EvalList({
 		GenerateOrSubClause(projectbox<<gettext(),"PROJECT"),
 		GenerateOrSubClause(sourcebox<<gettext(),"SOURCE")
-		});
-	whereclause=GenerateWhereClause(subclauses);
+	});
+	
+	// Only keep going if we actually have a project and source selection
+	If(And(subclauses[1]!="",subclauses[2]!=""),		
 
-	// Get the list of columns for this project+source
-	dbc =  Create Database Connection("DSN=AdvDev Database");
-	
-	desc=Execute SQL(dbc,"SELECT DISTINCT(PARAM) FROM `Measurements` "||whereclause||" ORDER BY `PARAM`;",
-		"ParamsList",Invisible);
-	CloseDatabaseConnection(dbc);
-	
-	// If the SQL sucessfully returned a table
-	If(Try(Not(Is Missing(desc)),1),
-	
-		// Take that list, and remove the known non-test columns
-		all params=column(desc,"PARAM")<<Get Values;
-		Close(desc,NoSave);
-		For( ntc=1, ntc<=NItems(::nontestcolumns),ntc++,
-			Remove From(all params,Contains(all params,::nontestcolumns[ntc]));
-		);
+		// Get the list of columns for this project+source
+		whereclause=GenerateWhereClause(subclauses);
+		dbc =  Create Database Connection("DSN=AdvDev Database");
+		desc=Execute SQL(dbc,"SELECT DISTINCT(PARAM) FROM Lots JOIN Loads on Lots.LOTID=Loads.LOTID"
+			||" JOIN "||(defaults["datatable"])||" on Loads.LOADID="||(defaults["datatable"])||".LOADID "
+			||whereclause||" ORDER BY `PARAM`;",
+			"ParamsList",Invisible);
+		CloseDatabaseConnection(dbc);
 		
-		// Update the list box and recount
-		parambox<<set items(all params);
-		recount();
+		// If the SQL sucessfully returned a table
+		If(Try(Not(Is Missing(desc)),1),
+		
+			// Take that list, and remove the known non-test columns
+			all params=column(desc,"PARAM")<<Get Values;
+			Close(desc,NoSave);
+			nontestcolumns={"PROJECT","SOURCE","PC","LOT","WAFER","UNIVERSAL SITE",
+				"XCOORD","YCOORD","TESTDATE","LOADDATE","FILENAME"};
+			For( ntc=1, ntc<=NItems(nontestcolumns),ntc++,
+				pos=Contains(all params,nontestcolumns[ntc]);
+				If(pos,Remove From(all params,Contains(all params,pos)));
+			);
+			
+			// Update the list box and recount
+			parambox<<set items(all params) << set nlines(12);
+			recount();
+		);
 	);
 );
 
 // Updates the count of how many params are selected
 recount=Function({},
 	numselbox<<Set Text(Char(Length(parambox<<get selected indices)));
+	parambox<< set nlines(12);
 );
 
 // Update the PlotParamBox (the little list on the right)
-// If there is a selection in ParamBox, bring it over,
-// Otherwise, bring over everything.
+// This list is populated from the labeled columns of the query table
 Update Plot Parambox=Function({},
+
+	// Get the column names
 	pcols=Data Table(querytablebox<<gettext)<<get labeled columns;
 	params={};
 	For(p=1,p<=NItems(pcols),p++,
-		Insert into(params,pcols[p]<<get name)
+		Insert into(params,HeadNameExpr(pcols[p]))
 	);
 	
+	// Put them in and select the first one
 	plotparambox<<set items(params);
 	plotparambox<<set selected(1);
 );
 
+
+// Selects parameters from the parambox matching the user-supplied pattern
 Wildcard Selection=Function({},
-	mode=regexoptions<<get selected();
-	pattern="^"||substitute(regexbox<<get text(),"*",".*")||"$";
+	
+	// Want to use the regex ability of JMP, but the user is expecting to 
+	// input just a pattern with * wildcards. So I'm going to convert
+	// * -> .* and escape all other special regex operators they may use
+	pattern="^"||substitute(wildcardbox<<get text(),
+		"\","\\",".","\.","^","\^","$","\$","*",".*","+","\+",
+		"?","\?","(","\(",")","\)","[","\"||"[","{","\{","|","\|"
+		)||"$";
 	items=parambox<< get items;
 	cur selection=parambox<< get selected indices;
 	
+	// Do we want to extend, replace, or subset the current selection
+	mode=selectionoptions<<get selected();
+	
 	// Cycle through the items in the listbox
-	For(i=1,i<Length(items),i++,
+	For(i=1,i<=Length(items),i++,
 	
 		// True iff the regex matches the current item
 		doesmatch=Not(Is Missing(Regex(items[i],pattern)));
@@ -285,12 +511,23 @@ Wildcard Selection=Function({},
 	recount();
 );
 
-/////
+//////////////////////////////////////////////////
 // Create the graphical front-end
-/////
+//////////////////////////////////////////////////
 
-// Most of the below is just GUI building, but I'll comment on the part that
-// is actually doing something...
+// GUI Defaults
+defaults=AssociativeArray();
+defaults["source"]="FinalWAT";
+defaults["project"]="Falcon";
+defaults["pc"]="";
+defaults["lot"]="";
+defaults["wafer"]="";
+defaults["splits"]="";
+defaults["wafermap"]="";
+defaults["user"]="sam";
+defaults["datatable"]="Measurements";
+
+// GUI-building
 eval(eval expr(New Window("JmpForJoy",
 	<<Show Toolbars(0),
 	<<Show Menu(0),
@@ -300,35 +537,44 @@ eval(eval expr(New Window("JmpForJoy",
 			// Contains the "Parameters to Query" section
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
 				VListBox(
-					TextBox("<b>Parameters to query</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
-									
+					TextBox("<b>Parameters to query</b>",<<Markup(1),<<Set Width(225),<<SetNLines(2)),
+					
+					// Source and Project buttons will reupdate parambox when the user changes the value
 					HListBox(BorderBox(Bottom(5),TextBox("Source: ",<<Set Width(55))),
-							sourcebox=TextEditBox(::defaults["source"],<<Set Width(150),<<SetScript(UpdateParamBox()))),
+							sourcebox=TextEditBox(defaults["source"],
+							<<Set Width(220),
+							<<Set Hint("eg. M3WAT, FinalWAT, Keithley, SParam"),
+							<<SetScript(UpdateParamBox()))),
 					HListBox(BorderBox(Bottom(5),TextBox("Project: ",<<Set Width(55))),
-							projectbox=TextEditBox(::defaults["project"],<<Set Width(150),<<SetScript(UpdateParamBox()))),
+							projectbox=TextEditBox(defaults["project"],
+							<<Set Width(220),
+							<<Set Hint("eg. Falcon, Eagle, Dragon"),
+							<<SetScript(UpdateParamBox()))),
 							
-					// Button to update parambox without redownloading data
+					// Button to update parambox
 					ButtonBox("Refresh parameter list from table",
 						update parambox();
 					),		
 									
 					// Listbox for the parameters
-					// Starts out empty, until the end of this chunk of GUI code.
 					// box will call recount() every time the selection is manually changed
-					parambox=ListBox({},width(225),nlines(12),recount()),
+					parambox=ListBox({},width(275),nlines(12),recount()),
 					
+					// Options for quickly selecting parameters
 					VListBox(
 						TextBox("Parameter Selection Regex:  "),
-						regexbox=TextEditBox("", <<Set Width(225),<<SetScript(WildcardSelection())),
+						wildcardbox=TextEditBox("", <<Set Width(275),<<SetScript(WildcardSelection())),
 						HListBox(
 							BorderBox(Top(7),
-							regexoptions=Radiobox({"Replace","Extend","Subset"})),
-							BorderBox(Left(70),
+							selectionoptions=Radiobox({"Replace","Extend","Subset"})),
+							BorderBox(Left(110),
 							VListBox(Align(Right),
 								HListBox(TextBox("Num Selected:"),
 								numselbox=TextBox("10000")),
-								// Button to do the regex-based updating of parambox
+								
+								// Button to do the wildcard-based updating of parambox
 								wildcardsel=ButtonBox("Wildcard Selection",WildcardSelection()),
+								
 								// Button to clear the selection and recount
 								ButtonBox("Clear Selection",parambox<<clear selection();recount();),
 							))
@@ -340,7 +586,7 @@ eval(eval expr(New Window("JmpForJoy",
 			// Help section with link to main page
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
 				VListBox(Align(Center),
-					TextBox("<b>Curiousity, Confusion, or Complaints?</b>",<< Set Width(229),<<Markup(1)),
+					TextBox("<b>Curiousity, Confusion, or Complaints?</b>",<< Set Width(279),<<Markup(1)),
 					BorderBox(Top(27),Bottom(27),
 						ButtonBox("JmpForJoy Main Page",
 							Web("http://extfnddb01.adsdesign.analog.com")
@@ -358,23 +604,24 @@ eval(eval expr(New Window("JmpForJoy",
 					// Inputs related to sources of data				
 					VListBox(Align(Right),
 						HListBox(TextBox("PC: ",<<Set Width(79)),
-							pcbox=TextEditBox(::defaults["pc"],<<Set Width(250))),
+							pcbox=TextEditBox(defaults["pc"],<<Set Width(250),<<Set Hint("eg. pc15, pc17"))),
 						HListBox(TextBox("Lot: ",<<Set Width(79)),
-							lotbox=TextEditBox(::defaults["lot"],<<Set Width(250))),
+							lotbox=TextEditBox(defaults["lot"],<<Set Width(250),<<Set Hint("eg. D80847.00, D80857.00"))),
 						HListBox(TextBox("Wafer: ",<<Set Width(79)),
-							waferbox=TextEditBox(::defaults["wafer"],<<Set Width(250))),
+							waferbox=TextEditBox(defaults["wafer"],<<Set Width(250),<<Set Hint("eg. 1, 2, 3"))),
 						HListBox(TextBox("Splits: ",<<Set Width(79)),
-							splitsbox=TextEditBox(::defaults["splits"],<<Set Width(250))),
-						HListBox(TextBox("Map: ",<<Set Width(79)),
-							wafermapbox=TextEditBox(::defaults["wafermap"],<<Set Width(250))),
+							splitsbox=TextEditBox(defaults["splits"],<<Set Width(250),<<Set Hint("eg. splits/splits.xlsx"))),
+						HListBox(TextBox("Wafermap: ",<<Set Width(79)),
+							wafermapbox=TextEditBox(defaults["wafermap"],<<Set Width(250),<<Set Hint("eg. Falcon_pc17"))),
 						
 						// Query option Checkboxes
 						HListBox(
+							splitdevbox=CheckBox("Split device ",<<Set(0)),
 							invisiblebox=CheckBox("Invisible  ",<<Set(0)),
 							closeprevbox=CheckBox("Close previous  ",<<Set(1)),
 							
 							// When "Run on Generate" is selected, disable the SQL query box and "Run Query"
-							runongeneratebox=CheckBox("Run on Generate  ",<<Set(1),
+							runongeneratebox=CheckBox("Run now  ",<<Set(1),
 								If(runongeneratebox<<get(),
 									querybox<<enable(0);
 									runquerybox<<enable(0);
@@ -386,112 +633,18 @@ eval(eval expr(New Window("JmpForJoy",
 						),
 						
 						// Generates the SQL query shown in the box
-						ButtonBox("Generate Query",
-						
-							// If the "Close previous" is selected, close the previous query
-							If(closeprevbox<<get(),Try(Close(DataTable(querytablebox<<gettext()),NoSave)););
-						
-							// Generate the which columns part of the SQL query from ParamBox
-							params=parambox<<get selected();
-							If(NItems(params)==0,
-								Throw("Select some parameters!\!N(On the left...)")
-							);
-							
-							// Generate the WHERE part of the SQL query based on the data source inputs
-							subclauses=EvalList({
-								GenerateOrSubClause(projectbox<<gettext(),"PROJECT"),
-								GenerateOrSubClause(sourcebox<<gettext(),"SOURCE"),
-								GenerateOrSubClause(Concat Items(params,","),"PARAM"),
-								GenerateOrSubClause(pcbox<<gettext(),"PC"),
-								GenerateOrSubClause(lotbox<<gettext(),"LOT"),
-								GenerateOrSubClause(waferbox<<gettext(),"WAFER")
-								});
-							whereclause=GenerateWhereClause(subclauses);
-							
-							// Append the project and/or source to the parameter name if selecting
-							// multiple project and/or sources.
-							collist="*";
-							If(Contains(projectbox<<gettext(),","),
-								collist="*, CONCAT(PARAM,\!"_\!",PROJECT) AS PARAMETER";
-							);
-							If(Contains(sourcebox<<gettext(),","),
-								collist="*, CONCAT(PARAM,\!"_\!",SOURCE) AS PARAMETER";
-							);
-							If(And(Contains(projectbox<<gettext(),","),Contains(sourcebox<<gettext(),",")),
-								collist="*, CONCAT(PARAM,\!"_\!",PROJECT,SOURCE) AS PARAMETER";
-							);							
-							
-							// Put the whole query together
-							querybox<<set text("SELECT "||collist
-								||" from `Measurements` "||whereclause||";");
-							
-							// If "Run on Generate" is selected, click the "Run Query" button
-							If(runongeneratebox<<get(),eval(runquerybox<<getfunction));
-						),
-						
-						
+						ButtonBox("Generate Query", Generate Query()),
 						TextBox("SQL Query: ",<<Set Width(332)),
 						querybox=TextEditBox("",<<Set Width(332),<<Set NLines(6)),
 						
 						
 						// Button to run the query, and update parameter listing
-						runquerybox=ButtonBox("Run Query",
-						
-							// Get the query results, keep them invisible
-							dbc =  Create Database Connection("DSN=AdvDev Database");
-							qr raw=Execute SQL(dbc,querybox<<get text(),"Query Results Raw",Invisible);
-							// Rename PARAMETER column (if exists) overwriting PARAM
-							Try(
-								Column(qr raw,"PARAMETER");
-								qr raw <<Delete Columns(PARAM);
-								Column(qr raw,"PARAMETER")<<Set Name("PARAM");
-							);
-							
-							
-							Try(
-								visibility=If(invisiblebox<<get(),"Invisible","Visible");
-								// Split based on param
-								Eval(EvalExpr(
-									qr= qr raw << split(
-										Split By( :PARAM ),
-										Split( :VALUE ),
-										Group( :SOURCE, :LOT, :WAFER, :SITE ),
-										Output Table( "Query Results" ),
-										name expr(visibility)
-								)));
-								
-								// Group the parameter columns (ie those which didn't exist in raw)
-								cols in raw=qr raw<<get column names(String);
-								cols in result=qr <<get column names(String);
-								For (c=1,c<=NItems(cols in result),c++,
-									If(Not(Contains(cols in raw,cols in result[c])),
-										//(cols in result[c])<<Add column properties(Notes("Parameter"));
-										Column(qr,cols in result[c]) << Label(1);
-									);
-								);
-								
-								,
-								Throw("Couldn't split the query table... please make sure your query "
-									||" includes the columns SOURCE, LOT, WAFER, SITE, and PARAM.")	
-							);
-							CloseDatabaseConnection(dbc);
-							Close(qr raw, NoSave);
-							
-							// If the SQL successfully returned a table
-							If(Try(Not(Is Missing(qr)),1),
-								qr=AddSplits(qr,::scriptdir||(splitsbox<<gettext()),invisiblebox<<get);
-								prepWaferMapStuff(qr,(wafermapbox<<gettext()));
-								querytablebox<<set text(qr<<Get Name());
-								
-								Update Plot ParamBox();
-							);
-						)
-						
+						runquerybox=ButtonBox("Run Query",Run Query())
 					)
 				)
 			),
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),VListBox(
-				TextBox("<b>Properties for a Quick Plot</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
+				TextBox("<b>Quick Variability/Failure Plot</b>",<<Markup(1),<<Set Width(200),<<SetNLines(2)),
 				HListBox(VListBox(
 					
 					// Inputs related to the appearance of the graph
@@ -510,9 +663,9 @@ eval(eval expr(New Window("JmpForJoy",
 					showlegendbox=CheckBox("Show Legend"),
 					reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
 					authlimbox=CheckBox("Authoritative Limits",<<Set(0)),
-					HListBox(TextBox("JmpForJoy User: "),userbox=TextEditBox(::defaults["user"])),
+					HListBox(TextBox("JmpForJoy User: "),userbox=TextEditBox(defaults["user"])),
 					
-					// Button to run JmpForJoy!
+					// Button to run the plotting functionality!
 					HListBox(
 						ButtonBox("Generate Plot",
 					
@@ -529,7 +682,7 @@ eval(eval expr(New Window("JmpForJoy",
 							Throw("Select a parameter to plot!\!N"||"(The little box on the right.)"));
 							
 							// Get desires from GUI							
-							::rundicts[run]["param"]=(plotparambox<<get selected())[1];
+							::rundicts[run]["params"]=plotparambox<<get selected();
 							::rundicts[run]["querytable"]=querytablebox<<gettext();
 							::rundicts[run]["specialanalysis"]=specialbox<<get();
 							::rundicts[run]["centeredge"]=splitCEbox<<get();
@@ -558,7 +711,7 @@ eval(eval expr(New Window("JmpForJoy",
 									TextBox("  You can put your"||
 									" username directly into this script "||
 									"to save time in the future. Just search DBFrontEnd.jsl for "||
-									"<b>::defaults[\!"user\!"]=\!"\!";</b>,"||
+									"<b>defaults[\!"user\!"]=\!"\!";</b>,"||
 									" and put in your name!",
 									<<Set Wrap(300),
 									<<Markup(1))
@@ -577,7 +730,7 @@ eval(eval expr(New Window("JmpForJoy",
 							::rundicts[run]=AssociativeArray();
 							
 							// Get desires from GUI
-							::rundicts[run]["param"]=(plotparambox<<get selected())[1];
+							::rundicts[run]["params"]=plotparambox<<get selected();
 							::rundicts[run]["querytable"]=querytablebox<<gettext();
 							::rundicts[run]["source"]=sourcebox<<gettext();
 							::rundicts[run]["project"]=projectbox<<gettext();
@@ -596,15 +749,18 @@ eval(eval expr(New Window("JmpForJoy",
 							querytablebox=TextEditBox("",<<Set Width(135),<<SetScript(UpdatePlotParamBox()))
 						),
 						TextBox("Plot Parameter (select one):"),
-						plotparambox=ListBox({},width(161),nlines(6),<<Set Max Selected(1));
+						plotparambox=ListBox({},width(161),nlines(6));
 					))
-				)))
-					
+				)
+			)
+		)
+				
+// Sorry, did you say you wanted a few more parentheses?
 )))));
 
 
 // Fill the parameter listing based on the current inputs (defaults)
 Update ParamBox();
 
-// Disable the SQL query entry since we start with "Run on Generate" selected
+// Disable the SQL query entry (since we start with "Run on Generate" selected)
 Eval(runongeneratebox<<getfunction);

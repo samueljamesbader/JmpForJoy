@@ -1,97 +1,121 @@
 // Prepares for a run of any plotting functionality by creating a separate copy of the
 // relevant data from the query table that can be filtered without messing with other
 // plots from the query table.  Also gets the limits from the database and creates the
-// various Failure columns in the copy
+// various Failure columns in the copy.
 prepRun=Function({run},{Default Local},
 
 	// Make a copy of the query table
 	::rundicts[run]["htab"]=DataTable(::rundicts[run]["querytable"])<<Subset(
-		CopyFormula(0),SuppressFormulaEvalution(1),
+		CopyFormula(0),SuppressFormulaEvalution(1),Selected Columns(0),Selected Rows(0),
 		OutputTableName("Copy for Run "||Char(run)),Invisible);
 	::rundicts[run]["htab"]<< Set Label Columns();
-	
-	// Short names for some later used variables
 	htab=::rundicts[run]["htab"];
-	colname=::rundicts[run]["param"];
 	
-	// Get limits
-	DB to Rundicts(run,colname);
-
-	// We're about to make a bunch of tweaks to the table, so let's warn JMP
-	// not to do any intermediate processing (like evaluating formulas)
-	// on this table until we're finished!
-	htab << Begin Data Update;
+	// Set up a parameter dictionary "pd" for this run.
+	// Each parameter of the run will be a key into this dictionary,
+	// which will include things like spec limits and references to
+	// GUI elements specific to each parameter.
+	::rundicts[run]["pd"]=AssociativeArray();
 	
-	// We'll hide some of the intermediate columns after we use them
-	cols to hide={};
-	
-	// Create a copy of the parameter column that only has values for center sites
-	center formula = eval expr( if(:ColorMap=="Center",ascolumn(expr(colname)),.));
-	htab << New column(
-		colname||" center";,
-		Formula(nameexpr(center formula))
-	);
-	
-	// Create a copy of the parameter column that only has values for edge sites
-	edge formula = eval expr( if(:ColorMap=="Edge",ascolumn(expr(colname)),.));
-	htab << New column(
-		colname||" edge",
-		Formula(nameexpr(edge formula))
-	);	
-
-	// The failbool column: boolean formula, 1 if failure
-	failbool_colname=colname||"_FAILBOOL";
-	eval(eval expr(col=htab << New Column(
-		failbool_colname,
-		Formula(
-			( ascolumn(expr(colname)) < ::rundicts[expr(run)]["LSL"])
-			|
-			( ascolumn(expr(colname)) > ::rundicts[expr(run)]["USL"]) 	
-		)
-	)));
-	Insert Into(cols to hide, col);
-	
-	// failbool, but only for centers
-	eval(eval expr(col=htab << New Column(
-		failbool_colname||" center",
-		Formula(if(:ColorMap=="Center",ascolumn(expr(failbool_colname)),.))
-	)));
-	Insert Into(cols to hide, col);
-	
-	// failbool, but only for edges
-	eval(eval expr(col=htab << New Column(
-		failbool_colname||" edge",
-		Formula(if(:ColorMap=="Edge",ascolumn(expr(failbool_colname)),.))
-	)));
-	Insert Into(cols to hide, col);
-	
-	// The failpct column:
-	// failure proportion formula calculated by averaging the boolean column
-	// over rows that have the same wafer, lot_id, and pcm_spec.
-	failpct_colname=colname||"_FAILPCT";
-	eval(eval expr(htab << New Column(
-		failpct_colname,
-		Formula(col mean(ascolumn(expr(failbool_colname)),:WAFER, :LOT, :SOURCE))
-	)));
+	// For each column
+	For(p=1,p<=NItems(::rundicts[run]["params"]),p++,
+		colname=::rundicts[run]["params"][p];
+		::rundicts[run]["pd"][colname]=AssociativeArray();
 		
-	// failpct, but only for centers
-	eval(eval expr(htab << New Column(
-		failpct_colname||" center",
-		Formula(col mean(ascolumn(expr(failbool_colname||" center")),:WAFER, :LOT, :SOURCE))
-	)));
-	
-	// failpct, but only for edges
-	eval(eval expr(htab << New Column(
-		failpct_colname||" edge",
-		Formula(col mean(ascolumn(expr(failbool_colname||" edge")),:WAFER, :LOT, :SOURCE))
-	)));
-	
-	// Tell JMP we're done tweaking the table
-	htab << RunFormulas();
-	htab << End Data Update;
-	
-	// Hide those intermediate columns
-	For(c=1,c<=NItems(Cols to Hide),c++, (Cols to Hide[c])<<hide;);
+		// If param contains a "...| [source]" ending
+		// split the name to override the given run's source
+		// for this particular parameter
+		param name parts=Regex Match(colname,"^(.+) \| (.*)$");
+		If(NItems(param name parts),
+			pureparam=param name parts[2];
+			source=param name parts[3];
+			::rundicts[run]["pd"][colname]["pureparam"]=pureparam;
+			If(source!="",::rundicts[run]["pd"][colname]["source"]=source);
+			,
+			::rundicts[run]["pd"][colname]["pureparam"]=colname;
+			::rundicts[run]["pd"][colname]["source"]=::rundicts[run]["source"];
+		);
+		
+		// Get limits
+		Show(::rundicts[run]);
+		DB to Rundicts(run,colname);
+
+		// We're about to make a bunch of tweaks to the table, so let's warn JMP
+		// not to do any intermediate processing (like evaluating formulas)
+		// on this table until we're finished!
+		htab << Begin Data Update;
+		
+		// We'll hide some of the intermediate columns after we use them
+		cols to hide={};
+		
+		// Create a copy of the parameter column that only has values for center sites
+		center formula = eval expr( if(:ColorMap=="Center",ascolumn(expr(colname)),.));
+		htab << New column(
+			colname||" center";,
+			Formula(nameexpr(center formula))
+		);
+		
+		// Create a copy of the parameter column that only has values for edge sites
+		edge formula = eval expr( if(:ColorMap=="Edge",ascolumn(expr(colname)),.));
+		htab << New column(
+			colname||" edge",
+			Formula(nameexpr(edge formula))
+		);	
+
+		// The failbool column: boolean formula, 1 if failure
+		failbool_colname=colname||"_FAILBOOL";
+		eval(eval expr(col=htab << New Column(
+			failbool_colname,
+			Formula(
+				( ascolumn(expr(colname)) < ::rundicts[expr(run)]["pd"][expr(colname)]["LSL"])
+				|
+				( ascolumn(expr(colname)) > ::rundicts[expr(run)]["pd"][expr(colname)]["USL"]) 	
+			)
+		)));
+		Insert Into(cols to hide, col);
+		
+		// failbool, but only for centers
+		eval(eval expr(col=htab << New Column(
+			failbool_colname||" center",
+			Formula(if(:ColorMap=="Center",ascolumn(expr(failbool_colname)),.))
+		)));
+		Insert Into(cols to hide, col);
+		
+		// failbool, but only for edges
+		eval(eval expr(col=htab << New Column(
+			failbool_colname||" edge",
+			Formula(if(:ColorMap=="Edge",ascolumn(expr(failbool_colname)),.))
+		)));
+		Insert Into(cols to hide, col);
+		
+		// The failpct column:
+		// failure proportion formula calculated by averaging the boolean column
+		// over rows that have the same wafer, lot_id, and pcm_spec.
+		failpct_colname=colname||"_FAILPCT";
+		eval(eval expr(htab << New Column(
+			failpct_colname,
+			Formula(col mean(ascolumn(expr(failbool_colname)),:WAFER, :LOT))
+		)));
+			
+		// failpct, but only for centers
+		eval(eval expr(htab << New Column(
+			failpct_colname||" center",
+			Formula(col mean(ascolumn(expr(failbool_colname||" center")),:WAFER, :LOT))
+		)));
+		
+		// failpct, but only for edges
+		eval(eval expr(htab << New Column(
+			failpct_colname||" edge",
+			Formula(col mean(ascolumn(expr(failbool_colname||" edge")),:WAFER, :LOT))
+		)));
+		
+		// Tell JMP we're done tweaking the table
+		htab << RunFormulas();
+		htab << End Data Update;
+		
+		// Hide those intermediate columns
+		For(c=1,c<=NItems(Cols to Hide),c++, (Cols to Hide[c])<<hide;);
+	);
 );
 
 // Utility for getting the limits from the UserPreferences table of the database
@@ -101,95 +125,103 @@ DB to Rundicts=Function({run,param},{Default Local},
 	// These values will get overwritten below, but we want to use
 	// IsMissing(...) to know when to overwrite values, so the entries
 	// themselves should exist.
-	::rundicts[run]["VALINV"]=.;
-	::rundicts[run]["LAL"]=.;
-	::rundicts[run]["UAL"]=.;
-	::rundicts[run]["LVL"]=.;
-	::rundicts[run]["UVL"]=.;
-	::rundicts[run]["LSL"]=.;
-	::rundicts[run]["USL"]=.;
-	::rundicts[run]["INC"]=.;
-	::rundicts[run]["SCALE"]=.;
-	::rundicts[run]["MT"]=.;
-	::rundicts[run]["FORMAT"]=.;
+	::rundicts[run]["pd"][param]["VALINV"]=.;
+	::rundicts[run]["pd"][param]["LAL"]=.;
+	::rundicts[run]["pd"][param]["UAL"]=.;
+	::rundicts[run]["pd"][param]["LVL"]=.;
+	::rundicts[run]["pd"][param]["UVL"]=.;
+	::rundicts[run]["pd"][param]["LSL"]=.;
+	::rundicts[run]["pd"][param]["USL"]=.;
+	::rundicts[run]["pd"][param]["INC"]=.;
+	::rundicts[run]["pd"][param]["SCALE"]=.;
+	::rundicts[run]["pd"][param]["MT"]=.;
+	::rundicts[run]["pd"][param]["FORMAT"]=.;
 	
 	// Get the relevant preferences from the database
 	dbc =  Create Database Connection("DSN=AdvDev Database");
 	preftable=Execute SQL(dbc,
 		"SELECT * FROM UserPreferences "||
 			"WHERE USERNAME='"||(::rundicts[run]["user"])
-			||"' AND SOURCE='"||(::rundicts[run]["source"])
-			||"' AND PARAM='"||param||"';",
+			||"' AND SOURCE='"||(::rundicts[run]["pd"][param]["source"])
+			||"' AND PARAM='"|| (::rundicts[run]["pd"][param]["pureparam"])||"';",
 		"PrefTable",
 		Invisible);
 	CloseDatabaseConnection(dbc);
 	
-	// If the table isn't empty, get the limits from the first entry
+	// If the retrieved table isn't empty, get the limits from there
 	If(NRows(preftable),
-		::rundicts[run]["VALINV"]=Column(preftable,"VALINV")[1];
-		::rundicts[run]["LAL"]=Column(preftable,"LAL")[1];
-		::rundicts[run]["UAL"]=Column(preftable,"UAL")[1];
-		::rundicts[run]["LVL"]=Column(preftable,"LVL")[1];
-		::rundicts[run]["UVL"]=Column(preftable,"UVL")[1];
+		::rundicts[run]["pd"][param]["VALINV"]=Column(preftable,"VALINV")[1];
+		::rundicts[run]["pd"][param]["LAL"]=Column(preftable,"LAL")[1];
+		::rundicts[run]["pd"][param]["UAL"]=Column(preftable,"UAL")[1];
+		::rundicts[run]["pd"][param]["LVL"]=Column(preftable,"LVL")[1];
+		::rundicts[run]["pd"][param]["UVL"]=Column(preftable,"UVL")[1];
 		lsl=Column(preftable,"LSL")[1];
 		usl=Column(preftable,"USL")[1];
-		::rundicts[run]["INC"]=Column(preftable,"INC")[1];
-		::rundicts[run]["SCALE"]=Column(preftable,"SCALE")[1];
-		::rundicts[run]["MT"]=Column(preftable,"MT")[1];
-		::rundicts[run]["FORMAT"]=Column(preftable,"FORMAT")[1];
+		::rundicts[run]["pd"][param]["INC"]=Column(preftable,"INC")[1];
+		::rundicts[run]["pd"][param]["SCALE"]=Column(preftable,"SCALE")[1];
+		::rundicts[run]["pd"][param]["MT"]=Column(preftable,"MT")[1];
+		::rundicts[run]["pd"][param]["FORMAT"]=Column(preftable,"FORMAT")[1];
 		
 		// Note the values and USL/LSL inversion which must happen if VALINV is on
-		If(::rundicts[run]["VALINV"],
-			::rundicts[run]["LSL"]=-usl;
-			::rundicts[run]["USL"]=-lsl;
+		If(::rundicts[run]["pd"][param]["VALINV"],
+			::rundicts[run]["pd"][param]["LSL"]=-usl;
+			::rundicts[run]["pd"][param]["USL"]=-lsl;
 			Column(::rundicts[run]["htab"],param)
 				<<SetValues(-1*(Column(::rundicts[run]["htab"],param)<<Get Values()));
 			,
-			::rundicts[run]["LSL"]=lsl;
-			::rundicts[run]["USL"]=usl;
+			::rundicts[run]["pd"][param]["LSL"]=lsl;
+			::rundicts[run]["pd"][param]["USL"]=usl;
 		);
 	);
 	Close(preftable,NoSave);
 	
 	// If this is a WAT param and there was nothing filled in for the SCALE or VALINV
 	// use Dave's WAT heuristic to guess what those should be
-	If(MatchesPattern(::rundicts[run]["source"],"WAT"),
-		If(IsMissing(::rundicts[run]["SCALE"]),
-			::rundicts[run]["SCALE"]=
+	If(MatchesPattern(::rundicts[run]["pd"][param]["source"],"WAT"),
+	
+		If(IsMissing(::rundicts[run]["pd"][param]["SCALE"]),
+		
+			::rundicts[run]["pd"][param]["SCALE"]=
 				If(Matches Pattern(param,"(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)"),
 					"Log","Linear"););
-		If(IsMissing(::rundicts[run]["VALINV"]),
-			::rundicts[run]["VALINV"]=Or(
+					
+		If(IsMissing(::rundicts[run]["pd"][param]["VALINV"]),
+		
+			::rundicts[run]["pd"][param]["VALINV"]=Or(
 				Matches Pattern(param,"(_ICO_-|_IEO_-|_IBO_-|_ICBO-|_ILK_-|_IEBO_-|_LDT_-|_VR_-)"),
 				Matches Pattern(param,"^AP.*(_ICO|_IEO|_IBO|_ICBO|_ILK|_IEBO|_LDT|_VR)")););
 	);
 	
 	// If this is a Keithley param and there was nothing filled in for the SCALE or VALINV
 	// use Dave's Keithley heuristic to guess what those should be
-	If(MatchesPattern(::rundicts[run]["source"],"Keithley"),
-		If(IsMissing(::rundicts[run]["SCALE"]),
-			::rundicts[run]["SCALE"]=
+	If(MatchesPattern(::rundicts[run]["pd"][param]["source"],"Keithley"),
+	
+		If(IsMissing(::rundicts[run]["pd"][param]["SCALE"]),
+		
+			::rundicts[run]["pd"][param]["SCALE"]=
 				If(Matches Pattern(param,"(_ICEO|_ICBO|_IEBO|_IL|_IEO|_IBO|_ICO)"),
 					"Log","Linear"););
-		If(IsMissing(::rundicts[run]["VALINV"]),
-			::rundicts[run]["VALINV"]=Or(
+					
+		If(IsMissing(::rundicts[run]["pd"][param]["VALINV"]),
+		
+			::rundicts[run]["pd"][param]["VALINV"]=Or(
 				Matches Pattern(param,"^P.*(ICEO|ICBO|IEBO|IL|IEO)"),
 				Matches Pattern(param,"^SHT.*LEAK")););
 	);
 	
 	// If this param was neither WAT nor Keithley and there was no entry in UserPreferences
 	// just say Linear and un-inverted to minimize confusion
-	If(IsMissing(::rundicts[run]["SCALE"]),::rundicts[run]["SCALE"]="Linear";);
-	If(IsMissing(::rundicts[run]["VALINV"]),::rundicts[run]["VALINV"]=0);
+	If(IsMissing(::rundicts[run]["pd"][param]["SCALE"]),::rundicts[run]["pd"][param]["SCALE"]="Linear";);
+	If(IsMissing(::rundicts[run]["pd"][param]["VALINV"]),::rundicts[run]["pd"][param]["VALINV"]=0);
 	
 	// If any of the axis settings were not filled in above, use Dave's heuristic to 
 	// guess good settings.
-	If(Or(	IsMissing(::rundicts[run]["LAL"]),
-			IsMissing(::rundicts[run]["UAL"]),
-			IsMissing(::rundicts[run]["INC"])),
+	If(Or(	IsMissing(::rundicts[run]["pd"][param]["LAL"]),
+			IsMissing(::rundicts[run]["pd"][param]["UAL"]),
+			IsMissing(::rundicts[run]["pd"][param]["INC"])),
 			
 		//If log scale
-		If(::rundicts[run]["SCALE"]=="Log",
+		If(::rundicts[run]["pd"][param]["SCALE"]=="Log",
 		
 			//1e-12 <-> 1e-3
 			lal=1e-12;
@@ -202,7 +234,7 @@ DB to Rundicts=Function({run,param},{Default Local},
 			// Create an invisible statistics table for this parameter's data
 			htab=::rundicts[run]["htab"];
 			eval(eval expr(
-				t=htab<<Tabulate(
+				t=expr(htab)<<Tabulate(
 					Show Control Panel( 0 ),
 					Add Table(
 						Column Table( Analysis Columns( expr(column(htab,param) ) ) ),
@@ -210,6 +242,7 @@ DB to Rundicts=Function({run,param},{Default Local},
 					),
 					<<MakeIntoDataTable(Invisible(1),OutputTable("Stats"))
 				)));
+			Show(param);
 			
 			// Read out the median, interquartile range, and min
 			// then close the stats table and window
@@ -219,7 +252,7 @@ DB to Rundicts=Function({run,param},{Default Local},
 			t<<Close Window();
 			Close("Stats",NoSave);
 			
-			// Calculate some reasonable and round axis values
+			// Calculate some reasonable (and "round") axis values
 			// roughly median+/-3 interquartile ranges.
 			order of magnitude inc=10^Round(Log10(iqr));
 			inc=Round(iqr/order of magnitude inc)*order of magnitude inc;
@@ -237,49 +270,59 @@ DB to Rundicts=Function({run,param},{Default Local},
 			// If all the data is positive, don't let the lower limit be negative
 			lal=If(dmin>0, Max(lal,0),lal);
 		);
-		::rundicts[run]["LAL"]=lal;
-		::rundicts[run]["UAL"]=ual;
-		::rundicts[run]["INC"]=inc;
+		::rundicts[run]["pd"][param]["LAL"]=lal;
+		::rundicts[run]["pd"][param]["UAL"]=ual;
+		::rundicts[run]["pd"][param]["INC"]=inc;
 	);
 
 	// If the minor ticks or format was never specified, choose reasonable ones.
-	If(IsMissing(::rundicts[run]["MT"]),
-		::rundicts[run]["MT"]=1);
-	If(IsMissing(::rundicts[run]["FORMAT"]),
-		::rundicts[run]["FORMAT"]="Format(\!"Best\!",9)");
+	If(IsMissing(::rundicts[run]["pd"][param]["MT"]),
+		::rundicts[run]["pd"][param]["MT"]=1);
+	If(IsMissing(::rundicts[run]["pd"][param]["FORMAT"]),
+		::rundicts[run]["pd"][param]["FORMAT"]="Format(\!"Best\!",9)");
 
 	// Now, if the "Authoritative limits" box was checked, overwrite any above
-	// LSL, USL, LVL, and UVL with values from the "Authoritative" user in the
-	// UserPreferences.
+	// LSL, USL, LVL, and UVL with values from the Authoritative user in the
+	// UserPreferences, keeping the other values as they are.  (Note the
+	// authoritative username is just the name of the project.)
 	If(::rundicts[run]["authlim"],
 	
+		// Make sure the project selection is simple
+		If(Contains(::rundicts[run]["project"],","),
+			Throw("Selecting Authoritative Limits when looking at multiple projects simultaneously"
+				||" is ambiguous... I wouldn't know which limits to use!");
+		);
+	
 		// Note that all WAT sources should just be called "WAT" for this lookup
-		authsource=If(MatchesPattern(::rundicts[run]["source"],"WAT"),
+		authsource=If(MatchesPattern(::rundicts[run]["pd"][param]["source"],"WAT"),
 			"WAT",
-			::rundicts[run]["source"]);
+			::rundicts[run]["pd"][param]["source"]);
+		project=::rundicts[run]["project"];
 		
 		// Get the authoritative limits
 		dbc =  Create Database Connection("DSN=AdvDev Database");
 		preftable=Execute SQL(dbc,
 			"SELECT * FROM UserPreferences "||
-				"WHERE USERNAME='Authoritative"
+				"WHERE USERNAME='"||project
 				||"' AND SOURCE='"||authsource
 				||"' AND PARAM='"||param||"';",
 			"PrefTable",
 			Invisible);
 			
-		// If an entry was found, overwrite any other preferences we found
+		// If an entry was found, overwrite preferences we found
 		If(NRows(preftable),
-			::rundicts[run]["LVL"]=Column(preftable,"LVL")[1];
-			::rundicts[run]["UVL"]=Column(preftable,"UVL")[1];
+			::rundicts[run]["pd"][param]["LVL"]=Column(preftable,"LVL")[1];
+			::rundicts[run]["pd"][param]["UVL"]=Column(preftable,"UVL")[1];
 			lsl=Column(preftable,"LSL")[1];
-			usl=Column(preftable,"USL")[1];		
-			If(::rundicts[run]["VALINV"],
-				::rundicts[run]["LSL"]=-usl;
-				::rundicts[run]["USL"]=-lsl;
+			usl=Column(preftable,"USL")[1];
+			
+			// Remembering, as above, to do the inversion
+			If(::rundicts[run]["pd"][param]["VALINV"],
+				::rundicts[run]["pd"][param]["LSL"]=-usl;
+				::rundicts[run]["pd"][param]["USL"]=-lsl;
 				,
-				::rundicts[run]["LSL"]=lsl;
-				::rundicts[run]["USL"]=usl;
+				::rundicts[run]["pd"][param]["LSL"]=lsl;
+				::rundicts[run]["pd"][param]["USL"]=usl;
 			);
 		);
 		Close(preftable,NoSave);

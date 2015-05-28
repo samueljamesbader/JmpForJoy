@@ -1,3 +1,7 @@
+// This script, called by DBFrontEnd.jsl, plots site which fail the spec
+// limits on a wafermap.  Really, it's more for example purposes than
+// anything else, so one could see a script for for making wafermaps
+
 // Use the local namespace
 Names Default To Here(1);
 
@@ -7,16 +11,15 @@ generateFailureWafermap=Function({run},{Default Local},
 	// Prepare the run
 	include(::scriptdir||"prepRun.jsl");
 	prepRun(run);
-	
-	// Short names for oft-used variables
-	param=::rundicts[run]["param"];
 	htab=::rundicts[run]["htab"];
-	
+
+		
+		
 	// When the report is closed, it should also
 	// - note this in the log
 	// - close the two data tables (and not throw an error if they're already closed)
 	// - empty out this entry from rundicts
-	win=New Window("Failure Map "||param,vb=VListBox());
+	win=New Window("Failure Map "||char(run),vb=VListBox());
 	eval(eval expr(
 		win<<On Close(
 			Write("Closing Run "||Char(run)||".\!N");
@@ -26,56 +29,60 @@ generateFailureWafermap=Function({run},{Default Local},
 			);
 	));	
 	
-	// Make the failure graph
-	// Note below that the FAILBOOL column is used to color the plot (*not* the FAILPCT column).
-	//   The "mean" summary statistic is used so that FAILBOOL gets averaged over all measurements
-	//   with the same COORD and LOT_ID.  (We don't use FAILPCT, because that's a column that the
-	//   main script uses internally, and it has *already* been averaged over each wafer.)
-	// The plot is wrapped by LOT
-	// The shape is specified by COORD_CAT
-	// Show Missing Shapes checkbox has been checked so the circle appears
-	// Ticks and labels are not shown, because they are meaningless...
-	// The title has been specified as "[param] Failure Rate"
-	graph=evalexpr(Graph Builder(
-		Show Control Panel( 0 ),
+	For(p=1, p<=NItems(::rundicts[run]["params"]), p++,
+		param=::rundicts[run]["params"][p];
 		
-		// What variables to use
-		Variables(
-			Wrap( expr(column(htab,"LOT" )), ShowTitle(0)),
-			Color( expr(eval expr(column(htab,expr(param||"_FAILBOOL" ))))),
-			Shape( expr(column(htab,"Coord_CAT" )))
-		),
-		
-		// Beyond here is just aesthetics
-		Elements(
-			Map Shapes(
-				Legend( 2 ),
-				Summary Statistic( "Mean" ),  //important
-				Show Missing Shapes( 1 )
+		// Make the failure graph
+		// Note below that the FAILBOOL column is used to color the plot (*not* the FAILPCT column).
+		//   The "mean" summary statistic is used so that FAILBOOL gets averaged over all measurements
+		//   with the same COORD and LOT_ID.  (We don't use FAILPCT, because that's a column that the
+		//   main script uses internally, and it has *already* been averaged over each wafer.)
+		// The plot is wrapped by LOT
+		// The shape is specified by UNIVERSALSITE
+		// Show Missing Shapes checkbox has been checked so the circle appears
+		// Ticks and labels are not shown, because they are meaningless...
+		// The title has been specified as "[param] Failure Rate"
+		graph=evalexpr(Graph Builder(
+			Show Control Panel( 0 ),
+			
+			// What variables to use
+			Variables(
+				Wrap( expr(column(htab,"LOT" )), ShowTitle(0)),
+				Color( expr(eval expr(column(htab,expr(param||"_FAILBOOL" ))))),
+				Shape( expr(column(htab,"UNIVERSAL SITE" )))
+			),
+			
+			// Beyond here is just aesthetics
+			Elements(
+				Map Shapes(
+					Legend( 2 ),
+					Summary Statistic( "Mean" ),  //important
+					Show Missing Shapes( 1 )
+				)
+			),
+			SendToReport(
+				Dispatch({},
+					"Graph Builder",
+					OutlineBox,
+					{Set Title(expr(param))}
+				),
+				Dispatch(
+					{},
+					"",
+					ScaleBox,
+					{Show Major Ticks( 0 ), Show Minor Ticks( 0 ), Show Labels( 0 )}
+				),
+				Dispatch(
+					{},
+					"",
+					ScaleBox( 2 ),
+					{Show Major Ticks( 0 ), Show Minor Ticks( 0 ), Show Labels( 0 )}
+				),
+				Dispatch( {}, "400", LegendBox, {Set Title( "Failure Rate" )} ),
+				Dispatch( {}, "graph title", TextEditBox, {Set Text( "" )} )
 			)
-		),
-		SendToReport(
-			Dispatch({},
-				"Graph Builder",
-				OutlineBox,
-				{Set Title(expr(param))}
-			),
-			Dispatch(
-				{},
-				"",
-				ScaleBox,
-				{Show Major Ticks( 0 ), Show Minor Ticks( 0 ), Show Labels( 0 )}
-			),
-			Dispatch(
-				{},
-				"",
-				ScaleBox( 2 ),
-				{Show Major Ticks( 0 ), Show Minor Ticks( 0 ), Show Labels( 0 )}
-			),
-			Dispatch( {}, "400", LegendBox, {Set Title( "Failure Rate" )} ),
-			Dispatch( {}, "graph title", TextEditBox, {Set Text( "" )} )
-		)
-	));
-	
-	vb<<Append(graph);
+		));
+		
+		vb<<Append(graph);
+	);
 );
