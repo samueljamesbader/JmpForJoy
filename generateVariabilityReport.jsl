@@ -252,9 +252,13 @@ generateVariabilityReport=Function({run},{Default Local},
 								::rundicts[expr(run)]["pd"][expr(param)]["USL"]=::rundicts[expr(run)]["pd"][expr(param)]["uslbox"] <<get();
 								User Changed Spec Limits(expr(run),expr(param)))))),		
 					H List Box(Align(Center),
-						::rundicts[expr(run)]["pd"][expr(param)]["slidercheck"]=CheckBox("Show Sliders", Toggle Sliders(expr(run),expr(param))),
-						ButtonBox("Recalc CPK", RecalcCPK(expr(run),expr(param))),
-						ButtonBox("Save Param",Save Param(expr(run),expr(param))),
+						ButtonBox("Recalc CPK", RecalcAllCPKs(expr(run))),
+						ButtonBox("Save Param",
+							If(::rundicts[expr(run)]["pd"][expr(param)]["savesall"]<<get,
+								Save All Params(expr(run))
+								,
+								Save Param(expr(run),expr(param))
+							)),
 					),
 					
 					// Add in the various text labels and text boxes for the CPK items
@@ -272,26 +276,36 @@ generateVariabilityReport=Function({run},{Default Local},
 						TextBox("<b> Unfiltered Median:  </b>"||Format(med,"Best",7),<<Markup(1),<<SetWidth(200)),
 						TextBox("<b> Unfiltered IQR:  </b>"||Format(iqr,"Best",7),<<Markup(1),<<SetWidth(200)),
 						
-						// If the value invert checkbox is changed, update ::rundicts and do the inversion,
-						// then call UserChangedSpecLimits() because LSL and USL had to change
-						::rundicts[expr(run)]["pd"][expr(param)]["valinvbox"]=
-							CheckBox("Invert Values",<<Set(::rundicts[expr(run)]["pd"][expr(param)]["VALINV"]),
-						
-							// Update ::rundicts
-							::rundicts[expr(run)]["pd"][expr(param)]["VALINV"]=::rundicts[expr(run)]["pd"][expr(param)]["valinvbox"]<<get();
+						HListBox(
+							// Whether the spec limits have sliders
+							::rundicts[expr(run)]["pd"][expr(param)]["slidercheck"]=
+								CheckBox("Show sliders ", Toggle Sliders(expr(run),expr(param))),
 							
-							// Do the inversion
-							swaplsl=-::rundicts[expr(run)]["pd"][expr(param)]["USL"];
-							swapusl=-::rundicts[expr(run)]["pd"][expr(param)]["LSL"];
-							::rundicts[expr(run)]["pd"][expr(param)]["LSL"]=swaplsl;
-							::rundicts[expr(run)]["pd"][expr(param)]["USL"]=swapusl;
-							Column(::rundicts[expr(run)]["htab"],expr(param))
-								<<SetValues(-1*(Column(::rundicts[expr(run)]["htab"],expr(param))<<Get Values()));
+							// If the value invert checkbox is changed, update ::rundicts and do the inversion,
+							// then call UserChangedSpecLimits() because LSL and USL had to change
+							::rundicts[expr(run)]["pd"][expr(param)]["valinvbox"]=
+								CheckBox("Invert ",<<Set(::rundicts[expr(run)]["pd"][expr(param)]["VALINV"]),
 							
-							// Update the GUI
-							::rundicts[expr(run)]["pd"][expr(param)]["lslbox"] <<set(::rundicts[expr(run)]["pd"][expr(param)]["LSL"]);
-							::rundicts[expr(run)]["pd"][expr(param)]["uslbox"] <<set(::rundicts[expr(run)]["pd"][expr(param)]["USL"]);
-							User Changed Spec Limits(expr(run),expr(param));
+								// Update ::rundicts
+								::rundicts[expr(run)]["pd"][expr(param)]["VALINV"]=::rundicts[expr(run)]["pd"][expr(param)]["valinvbox"]<<get();
+								
+								// Do the inversion
+								swaplsl=-::rundicts[expr(run)]["pd"][expr(param)]["USL"];
+								swapusl=-::rundicts[expr(run)]["pd"][expr(param)]["LSL"];
+								::rundicts[expr(run)]["pd"][expr(param)]["LSL"]=swaplsl;
+								::rundicts[expr(run)]["pd"][expr(param)]["USL"]=swapusl;
+								Column(::rundicts[expr(run)]["htab"],expr(param))
+									<<SetValues(-1*(Column(::rundicts[expr(run)]["htab"],expr(param))<<Get Values()));
+								
+								// Update the GUI
+								::rundicts[expr(run)]["pd"][expr(param)]["lslbox"] <<set(::rundicts[expr(run)]["pd"][expr(param)]["LSL"]);
+								::rundicts[expr(run)]["pd"][expr(param)]["uslbox"] <<set(::rundicts[expr(run)]["pd"][expr(param)]["USL"]);
+								User Changed Spec Limits(expr(run),expr(param));
+							),
+							
+							// Whether the spec limits have sliders
+							::rundicts[expr(run)]["pd"][expr(param)]["savesall"]=
+								CheckBox("Save all")
 						)
 					)
 
@@ -451,6 +465,13 @@ Save Param=Function({run,param},{Default Local},
 	Write("Presumably just saved limits\!N");
 );
 
+// Runs the above Save Param function for each parameter
+SaveAllParams=Function({run},{Default Local},
+	For(p=1,p<=NItems(::rundicts[run]["params"]),p++,
+		SaveParam(run,::rundicts[run]["params"][p]);
+	);
+);
+
 // Runs the CPK Calculation and updates the CPK fields
 RecalcCPK=Function({run,param},{Default Local},
 		
@@ -469,6 +490,13 @@ RecalcCPK=Function({run,param},{Default Local},
 	pd["meanbox"]<<set text(Format(mu,"Best",7));
 	pd["cplbox"]<<set text(char(round(cpl,3)));
 	pd["cpubox"]<<set text(char(round(cpu,3)));
+);
+
+// Runs the above CPK function for each parameter
+RecalcAllCPKs=Function({run},{Default Local},
+	For(p=1,p<=NItems(::rundicts[run]["params"]),p++,
+		RecalcCPK(run,::rundicts[run]["params"][p]);
+	);
 );
 
 // Adds or removes the draggable handles to/from the graph when the checkbox is changed
