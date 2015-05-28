@@ -23,6 +23,20 @@ Close All(Data Tables);
 ::rundicts={};
 
 //////////////////////////////////////////////////
+// GUI Defaults
+//////////////////////////////////////////////////
+defaults=AssociativeArray();
+defaults["source"]="";
+defaults["project"]="";
+defaults["pc"]="";
+defaults["lot"]="";
+defaults["wafer"]="";
+defaults["splits"]="";
+defaults["wafermap"]="";
+defaults["user"]="";
+defaults["datatable"]="Measurements";
+
+//////////////////////////////////////////////////
 // Utitilities for generating SQL
 //////////////////////////////////////////////////
 
@@ -514,18 +528,6 @@ Wildcard Selection=Function({},
 //////////////////////////////////////////////////
 // Create the graphical front-end
 //////////////////////////////////////////////////
-
-// GUI Defaults
-defaults=AssociativeArray();
-defaults["source"]="FinalWAT";
-defaults["project"]="Falcon";
-defaults["pc"]="";
-defaults["lot"]="";
-defaults["wafer"]="";
-defaults["splits"]="";
-defaults["wafermap"]="";
-defaults["user"]="sam";
-defaults["datatable"]="Measurements";
 
 // GUI-building
 eval(eval expr(New Window("JmpForJoy",
