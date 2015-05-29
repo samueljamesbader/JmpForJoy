@@ -262,8 +262,11 @@ RunQuery =Function({},
 		If(Try(Not(Is Missing(qr)),1),
 		
 			// Add limits to column properties, bring in splits, add wafermap info
-			AuthLimitsToColProps(qr);
-			qr=AddSplits(qr,::scriptdir||(splitsbox<<gettext()),invisiblebox<<get);
+			projecttext=projectbox<<gettext;
+			If(Not(Contains(projecttext,",")),
+				AuthLimitsToColProps(qr,projecttext));
+			If((splitsbox<<gettext) != "",
+				qr=AddSplits(qr,::scriptdir||(splitsbox<<gettext()),invisiblebox<<get));
 			prepWaferMapStuff(qr,(wafermapbox<<gettext()));
 			
 			// Update the query table name and the plot parambox
@@ -274,11 +277,11 @@ RunQuery =Function({},
 );
 
 // Brings the Authoritative spec limits into the properties of the parameter columns of Table tbl
-AuthLimitsToColProps=Function({tbl},{Default Local},
+AuthLimitsToColProps=Function({tbl,project},{Default Local},
 
 	// Get the limits
 	dbc =  Create Database Connection("DSN=AdvDev Database");
-	authlims=Execute SQL(dbc,"SELECT PARAM,LSL,USL FROM UserPreferences WHERE USERNAME='Authoritative';", Invisible);
+	authlims=Execute SQL(dbc,"SELECT PARAM,LSL,USL FROM UserPreferences WHERE USERNAME='"||project||"';", Invisible);
 	CloseDatabaseConnection(dbc);
 	
 	// Get the pure names from the parameter columns (ie without the "|SOURCE" part)
@@ -316,71 +319,68 @@ AuthLimitsToColProps=Function({tbl},{Default Local},
 // invisible is a boolean indicating whether the joined table should be invisible
 // Returns the joined table (or the original tbl if the splitsfile is invalid)
 AddSplits=Function({tbl,splitsfile,invisible},{Default Local},
-
-	Write("Checking for splits: "||splitsfile||"\!N");
 	
 	// Open the Excel file of splits if it exists
-	If(splitsfile!="",
-		If(file exists(splits file),
-			splittab=Open(
-				splitsfile,
-				Worksheet Settings(
-					1,
-					Has Column Headers( 1 ),
-					Number of Rows in Headers( 1 ),
-					Headers Start on Row( 1 ),
-					Data Starts on Row( 2 ),
-					Data Starts on Column( 1 ),
-					Data Ends on Row( 0 ),
-					Data Ends on Column( 0 ),
-					Replicated Spanned Rows( 1 ),
-					Suppress Hidden Rows( 1 ),
-					Suppress Hidden Columns( 1 ),
-					Treat as Hierarchy( 0 )
-				),
-				Private
-			);
-
-			// Check to see if it's missing the columns we need for matching...
-			splittab columns=splittab<<Get Column Names(String);
-			If(contains(splittab columns,"Full Lot")
-				&  contains(splittab columns,"Wafer"),
-			
-				// Delete the "base lot"" column if it exists
-				// (This was a column used in earlier versions of JmpForJoy, and
-				// change-resistant users may still include it ...)
-				base lot col num=Contains(splittab columns,"Base Lot");
-				If (base lot col num,
-					Remove From(splittab columns,base lot col num);
-					splittab<<Delete Column(Base Lot);
-				);				
-
-				// Merge the tables, and close the old data table
-				Column(splittab,"Full Lot")<<Set Name("LOT");
-				Column(splittab,"Wafer")<<Set Name("WAFER");
-				eval(evalexpr(newtbl=tbl << Join(
-						With(splittab),
-						By Matching Columns(:LOT = :LOT, :WAFER = :WAFER),
-						Merge Same Name Columns,
-						Preserve Main Table Order(1),
-						Suppress Formula Evaluation(1),
-						Include Non Matches(1,0),
-						Output Table Name("Query Results + Splits"),
-						expr(If(invisible,expr(Invisible),expr(Visible)))
-				)));
-				newtbl<<Delete Column(Match Flag);
-				Close(tbl,NoSave);
-				tbl=newtbl;
-				,
-				
-				// Or if necessary columns were missing, let the user know
-				Write("Splits table incorrectly formatted!\!N");,
-			);
-			Close(splittab, No Save);
-			,
-			// Or if the file doesn't exist, output the notice
-			Write("Splits file not found!\!N");
+	If(file exists(splits file),
+		Write("Checking for splits: "||splitsfile||"\!N");
+		splittab=Open(
+			splitsfile,
+			Worksheet Settings(
+				1,
+				Has Column Headers( 1 ),
+				Number of Rows in Headers( 1 ),
+				Headers Start on Row( 1 ),
+				Data Starts on Row( 2 ),
+				Data Starts on Column( 1 ),
+				Data Ends on Row( 0 ),
+				Data Ends on Column( 0 ),
+				Replicated Spanned Rows( 1 ),
+				Suppress Hidden Rows( 1 ),
+				Suppress Hidden Columns( 1 ),
+				Treat as Hierarchy( 0 )
+			),
+			Private
 		);
+
+		// Check to see if it's missing the columns we need for matching...
+		splittab columns=splittab<<Get Column Names(String);
+		If(contains(splittab columns,"Full Lot")
+			&  contains(splittab columns,"Wafer"),
+		
+			// Delete the "base lot"" column if it exists
+			// (This was a column used in earlier versions of JmpForJoy, and
+			// change-resistant users may still include it ...)
+			base lot col num=Contains(splittab columns,"Base Lot");
+			If (base lot col num,
+				Remove From(splittab columns,base lot col num);
+				splittab<<Delete Column(Base Lot);
+			);				
+
+			// Merge the tables, and close the old data table
+			Column(splittab,"Full Lot")<<Set Name("LOT");
+			Column(splittab,"Wafer")<<Set Name("WAFER");
+			eval(evalexpr(newtbl=tbl << Join(
+					With(splittab),
+					By Matching Columns(:LOT = :LOT, :WAFER = :WAFER),
+					Merge Same Name Columns,
+					Preserve Main Table Order(1),
+					Suppress Formula Evaluation(1),
+					Include Non Matches(1,0),
+					Output Table Name("Query Results + Splits"),
+					expr(If(invisible,expr(Invisible),expr(Visible)))
+			)));
+			newtbl<<Delete Column(Match Flag);
+			Close(tbl,NoSave);
+			tbl=newtbl;
+			,
+			
+			// Or if necessary columns were missing, let the user know
+			Write("Splits table incorrectly formatted!\!N");,
+		);
+		Close(splittab, No Save);
+		,
+		// Or if the file doesn't exist, output the notice
+		Write("Splits file not found!\!N");
 	);
 	
 	// Return the merged table
