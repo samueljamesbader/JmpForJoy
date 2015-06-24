@@ -5,7 +5,7 @@
 Names Default To Here(1);
 
 // Creates the graphical window showing the variability report
-generateVariabilityReport=Function({run},{Default Local},
+mainFunction=generateVariabilityReport=Function({run},{Default Local},
 
 	// Create a copy of the query results table and prep it with the extra columns
 	// we'll need.  If you want to understand this script, you may have to start by
@@ -56,7 +56,7 @@ generateVariabilityReport=Function({run},{Default Local},
 	// For each parameter
 	For(p=1,p<=NItems(::rundicts[run]["params"]),p++,
 		param=::rundicts[run]["params"][p];
-		fail_param=Concat(param,"_FAILPCT");
+		fail_param=Concat(param,If(::rundicts[run]["filterfailure"],"_FAILBOOL","_FAILPCT"));
 			
 		// Get the unfiltered data median and iqr from an invisible stats table
 		// Close the invisible table and associated extraneous window
@@ -119,8 +119,8 @@ generateVariabilityReport=Function({run},{Default Local},
 				// Hide control panel
 				Show Control Panel( 0 ),
 				
-				// Whether to show legend from rundicts
-				Show Legend( expr(::rundicts[run]["showlegend"]) ),
+				// Whether to show legend
+				Show Legend(0),
 				
 				// Put the X Groups along the bottom of the plot
 				X Group Edge( "Bottom" ),
@@ -184,7 +184,7 @@ generateVariabilityReport=Function({run},{Default Local},
 					),
 					
 					// Title the failure plot
-					Dispatch( {}, "Y title", TextEditBox, {Set Text( "Failure rate" )} ),
+					Dispatch( {}, "Y title", TextEditBox, {Set Text( expr(If(::rundicts[run]["filterfailure"],"Filtered Failure Rate","Failure Rate")) )} ),
 					
 					// Title the overall graph
 					Dispatch( {}, "graph title", TextEditBox, {Set Text( "Variability Plot" )} ),
@@ -262,13 +262,21 @@ generateVariabilityReport=Function({run},{Default Local},
 					),
 					
 					// Add in the various text labels and text boxes for the CPK items
-					H List Box(
-						TextBox("<b> Mean:  </b>",<<Markup(1)),
-						::rundicts[expr(run)]["pd"][expr(param)]["meanbox"]=TextBox("Hit Recalc"),
-						TextBox("<b>  CPL:  </b>",<<Markup(1)),
-						::rundicts[expr(run)]["pd"][expr(param)]["cplbox"]=TextBox("Hit Recalc"),
-						TextBox("<b>  CPU:  </b>",<<Markup(1)),
-						::rundicts[expr(run)]["pd"][expr(param)]["cpubox"]=TextBox("Hit Recalc";)
+					V List Box(
+						H List Box(
+							TextBox("<b> Mean:  </b>",<<Markup(1)),
+							::rundicts[expr(run)]["pd"][expr(param)]["meanbox"]=TextBox("Hit Recalc"),
+							TextBox("<b>  Std:  </b>",<<Markup(1)),
+							::rundicts[expr(run)]["pd"][expr(param)]["stdbox"]=TextBox("Hit Recalc")
+						),
+						H List Box(
+							TextBox("<b> CPL:  </b>",<<Markup(1)),
+							::rundicts[expr(run)]["pd"][expr(param)]["cplbox"]=TextBox("Hit Recalc"),
+							TextBox("<b>  CPU:  </b>",<<Markup(1)),
+							::rundicts[expr(run)]["pd"][expr(param)]["cpubox"]=TextBox("Hit Recalc"),
+							TextBox("<b>  CPK:  </b>",<<Markup(1)),
+							::rundicts[expr(run)]["pd"][expr(param)]["cpkbox"]=TextBox("Hit Recalc")
+						),
 					),
 					
 					// Median, iqr, and value invert checkbox
@@ -294,8 +302,13 @@ generateVariabilityReport=Function({run},{Default Local},
 								swapusl=-::rundicts[expr(run)]["pd"][expr(param)]["LSL"];
 								::rundicts[expr(run)]["pd"][expr(param)]["LSL"]=swaplsl;
 								::rundicts[expr(run)]["pd"][expr(param)]["USL"]=swapusl;
+								swaplvl=-::rundicts[expr(run)]["pd"][expr(param)]["UVL"];
+								swapuvl=-::rundicts[expr(run)]["pd"][expr(param)]["LVL"];
+								::rundicts[expr(run)]["pd"][expr(param)]["LVL"]=swaplvl;
+								::rundicts[expr(run)]["pd"][expr(param)]["UVL"]=swapuvl;
 								Column(::rundicts[expr(run)]["htab"],expr(param))
 									<<SetValues(-1*(Column(::rundicts[expr(run)]["htab"],expr(param))<<Get Values()));
+								Rundicts To Filter(expr(run),expr(param));
 								
 								// Update the GUI
 								::rundicts[expr(run)]["pd"][expr(param)]["lslbox"] <<set(::rundicts[expr(run)]["pd"][expr(param)]["LSL"]);
@@ -323,33 +336,10 @@ generateVariabilityReport=Function({run},{Default Local},
 			ToggleSliders(run,param);
 		);
 		
-		// Get the valid low and valid high from rundicts
-		lvl=::rundicts[run]["pd"][param]["LVL"];
-		uvl=::rundicts[run]["pd"][param]["UVL"];
-		datfilt=::rundicts[run]["pd"][param]["datfilt"];
-		
-		// Use the just-obtained lvl and uvl as the default filter limits for datfilt
-		// (The expression is slightly different depending on which values are missing.)
-		If(Not(Is Missing(lvl)) & Not(Is Missing(uvl)),
-			eval(eval expr(
-				datfilt<< (Filter Column(expr(as name(param))) <<
-					where(	as column(expr(param))>=expr(lvl) &
-							as column(expr(param))<=expr(uvl)))))	
-			,
-			If(Not(Is Missing(lvl)),
-				eval(eval expr(
-					datfilt<< (Filter Column(expr(as name(param))) <<
-						where(as column(expr(param))>=expr(lvl)))))	
-			);
-			If(Not(Is Missing(uvl)),
-				eval(eval expr(
-					datfilt<< (Filter Column(expr(as name(param))) <<
-						where(as column(expr(param))<=expr(uvl)))))	
-			);
-		);
+		Rundicts To Filter(run,param);
 		
 		// Also, tell JMP that when the filter is closed, it should close horizontally (aesthetics)
-		((datfilt<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);
+		(((::rundicts[run]["pd"][param]["datfilt"])<<report)[OutlineBox(1)])<<OutlineCloseOrientation(Horizontal);
 
 		// Run the calculation for CPK
 		RecalcCPK(run,param);
@@ -432,9 +422,13 @@ Save Param=Function({run,param},{Default Local},
 	If(pd["VALINV"],
 		lsl=-pd["USL"];
 		usl=-pd["LSL"];
+		lvl=-pd["UVL"];
+		uvl=-pd["LVL"];
 		,
 		lsl=pd["LSL"];
 		usl=pd["USL"];
+		lvl=pd["LVL"];
+		uvl=pd["UVL"];
 	);
 	
 	// Build the SQL to update UserPreferences
@@ -442,8 +436,8 @@ Save Param=Function({run,param},{Default Local},
 	usl=If(Is Missing(usl),"NULL",char(usl));
 	lal=If(Is Missing(pd["LAL"]),"NULL",char(pd["LAL"]));
 	ual=If(Is Missing(pd["UAL"]),"NULL",char(pd["UAL"]));
-	lvl=If(Is Missing(pd["LVL"]),"NULL",char(pd["LVL"]));
-	uvl=If(Is Missing(pd["UVL"]),"NULL",char(pd["UVL"]));
+	lvl=If(Is Missing(lvl),"NULL",char(lvl));
+	uvl=If(Is Missing(uvl),"NULL",char(uvl));
 	inc=If(Is Missing(pd["INC"]),"NULL",char(pd["INC"]));
 	mt =If(Is Missing(pd["MT" ]),"NULL",char(pd["MT"]));
 
@@ -453,7 +447,7 @@ Save Param=Function({run,param},{Default Local},
 			||char(pd["VALINV"])||","
 			||lal||","||ual||","||lvl||","||uvl||","||lsl||","||usl||","
 			||inc||",'"||char(pd["SCALE"])||"',"||mt||",'"||pd["FORMAT"]||"');";
-
+	show(sql);
 	// Execute the SQL
 	dbc =  Create Database Connection("DSN=AdvDev Database");
 	Execute SQL(dbc,
@@ -485,11 +479,14 @@ RecalcCPK=Function({run,param},{Default Local},
 	// Calculate values
 	cpu=(pd["USL"]-mu)/(3*sigma);
 	cpl=(mu-pd["LSL"])/(3*sigma);
+	cpk=Min(cpu,cpl);
 	
 	// Update fieds
 	pd["meanbox"]<<set text(Format(mu,"Best",7));
+	pd["stdbox"]<<set text(Format(sigma,"Best",7));
 	pd["cplbox"]<<set text(char(round(cpl,3)));
 	pd["cpubox"]<<set text(char(round(cpu,3)));
+	pd["cpkbox"]<<set text(char(round(cpk,3)));
 );
 
 // Runs the above CPK function for each parameter
@@ -612,6 +609,33 @@ Filter to Rundicts=Function({run,param},{Default Local},
 	// Save to rundicts
 	::rundicts[run]["pd"][param]["LVL"]=lvl;
 	::rundicts[run]["pd"][param]["UVL"]=uvl;	
+);
+
+// Get the valid low and valid high from rundicts
+Rundicts To Filter=Function({run,param},{Default Local},
+	lvl=::rundicts[run]["pd"][param]["LVL"];
+	uvl=::rundicts[run]["pd"][param]["UVL"];
+	datfilt=::rundicts[run]["pd"][param]["datfilt"];
+	
+	// Use the just-obtained lvl and uvl as the default filter limits for datfilt
+	// (The expression is slightly different depending on which values are missing.)
+	If(Not(Is Missing(lvl)) & Not(Is Missing(uvl)),
+		eval(eval expr(
+			datfilt<< (Filter Column(expr(as name(param))) <<
+				where(	as column(expr(param))>=expr(lvl) &
+						as column(expr(param))<=expr(uvl)))))	
+		,
+		If(Not(Is Missing(lvl)),
+			eval(eval expr(
+				datfilt<< (Filter Column(expr(as name(param))) <<
+					where(as column(expr(param))>=expr(lvl)))))	
+		);
+		If(Not(Is Missing(uvl)),
+			eval(eval expr(
+				datfilt<< (Filter Column(expr(as name(param))) <<
+					where(as column(expr(param))<=expr(uvl)))))	
+		);
+	);
 );
 
 // Evaluate all the failure columns (eg after spec limits or filtering have changed), and fix the

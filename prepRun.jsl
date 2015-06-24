@@ -128,10 +128,10 @@ DB to Rundicts=Function({run,param},{Default Local},
 	::rundicts[run]["pd"][param]["VALINV"]=.;
 	::rundicts[run]["pd"][param]["LAL"]=.;
 	::rundicts[run]["pd"][param]["UAL"]=.;
-	::rundicts[run]["pd"][param]["LVL"]=.;
-	::rundicts[run]["pd"][param]["UVL"]=.;
-	::rundicts[run]["pd"][param]["LSL"]=.;
-	::rundicts[run]["pd"][param]["USL"]=.;
+	lvl=.;
+	uvl=.;
+	lsl=.;
+	usl=.;
 	::rundicts[run]["pd"][param]["INC"]=.;
 	::rundicts[run]["pd"][param]["SCALE"]=.;
 	::rundicts[run]["pd"][param]["MT"]=.;
@@ -153,25 +153,14 @@ DB to Rundicts=Function({run,param},{Default Local},
 		::rundicts[run]["pd"][param]["VALINV"]=Column(preftable,"VALINV")[1];
 		::rundicts[run]["pd"][param]["LAL"]=Column(preftable,"LAL")[1];
 		::rundicts[run]["pd"][param]["UAL"]=Column(preftable,"UAL")[1];
-		::rundicts[run]["pd"][param]["LVL"]=Column(preftable,"LVL")[1];
-		::rundicts[run]["pd"][param]["UVL"]=Column(preftable,"UVL")[1];
+		lvl=Column(preftable,"LVL")[1];
+		uvl=Column(preftable,"UVL")[1];
 		lsl=Column(preftable,"LSL")[1];
 		usl=Column(preftable,"USL")[1];
 		::rundicts[run]["pd"][param]["INC"]=Column(preftable,"INC")[1];
 		::rundicts[run]["pd"][param]["SCALE"]=Column(preftable,"SCALE")[1];
 		::rundicts[run]["pd"][param]["MT"]=Column(preftable,"MT")[1];
 		::rundicts[run]["pd"][param]["FORMAT"]=Column(preftable,"FORMAT")[1];
-		
-		// Note the values and USL/LSL inversion which must happen if VALINV is on
-		If(::rundicts[run]["pd"][param]["VALINV"],
-			::rundicts[run]["pd"][param]["LSL"]=-usl;
-			::rundicts[run]["pd"][param]["USL"]=-lsl;
-			Column(::rundicts[run]["htab"],param)
-				<<SetValues(-1*(Column(::rundicts[run]["htab"],param)<<Get Values()));
-			,
-			::rundicts[run]["pd"][param]["LSL"]=lsl;
-			::rundicts[run]["pd"][param]["USL"]=usl;
-		);
 	);
 	Close(preftable,NoSave);
 	
@@ -311,22 +300,29 @@ DB to Rundicts=Function({run,param},{Default Local},
 			
 		// If an entry was found, overwrite preferences we found
 		If(NRows(preftable),
-			::rundicts[run]["pd"][param]["LVL"]=Column(preftable,"LVL")[1];
-			::rundicts[run]["pd"][param]["UVL"]=Column(preftable,"UVL")[1];
+			lvl=Column(preftable,"LVL")[1];
+			uvl=Column(preftable,"UVL")[1];
 			lsl=Column(preftable,"LSL")[1];
 			usl=Column(preftable,"USL")[1];
-			
-			// Remembering, as above, to do the inversion
-			If(::rundicts[run]["pd"][param]["VALINV"],
-				::rundicts[run]["pd"][param]["LSL"]=-usl;
-				::rundicts[run]["pd"][param]["USL"]=-lsl;
-				,
-				::rundicts[run]["pd"][param]["LSL"]=lsl;
-				::rundicts[run]["pd"][param]["USL"]=usl;
-			);
 		);
 		Close(preftable,NoSave);
 		CloseDatabaseConnection(dbc);
+	);
+	
+			
+	// Note the values and USL/LSL inversion which must happen if VALINV is on
+	If(::rundicts[run]["pd"][param]["VALINV"],
+		::rundicts[run]["pd"][param]["LSL"]=-usl;
+		::rundicts[run]["pd"][param]["USL"]=-lsl;
+		::rundicts[run]["pd"][param]["LVL"]=-uvl;
+		::rundicts[run]["pd"][param]["UVL"]=-lvl;
+		Column(::rundicts[run]["htab"],param)
+			<<SetValues(-1*(Column(::rundicts[run]["htab"],param)<<Get Values()));
+		,
+		::rundicts[run]["pd"][param]["LSL"]=lsl;
+		::rundicts[run]["pd"][param]["USL"]=usl;
+		::rundicts[run]["pd"][param]["LVL"]=lvl;
+		::rundicts[run]["pd"][param]["UVL"]=uvl;
 	);
 );
 

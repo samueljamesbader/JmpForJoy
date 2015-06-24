@@ -35,6 +35,7 @@ defaults["splits"]="";
 defaults["wafermap"]="";
 defaults["user"]="";
 defaults["datatable"]="Measurements";
+defaults["analysisscript"]="generateVariabilityReport.jsl";
 
 //////////////////////////////////////////////////
 // Utitilities for generating SQL
@@ -44,7 +45,7 @@ defaults["datatable"]="Measurements";
 // ...this function is easiest to explain by example:
 //
 // If text="pc11,pc15,pc17" and column="PC",
-// this returns ' ( `PC`="pc11" OR `PC`="pc15"  OR `PC`="pc17" ) '
+// this returns '`PC` in ("pc11","pc15","pc17" ) '
 //
 // In other words, it takes a string of comma-separated options,
 // and returns a parenthesized listing that could be part of an
@@ -62,12 +63,12 @@ Generate Or Sub Clause=Function({text,column},{Default Local},
 			// (Ignore blank options)
 			If(opts[i]!="",
 			
-				// If this is the first one, put an opening parenthesis
+				// If this is the first one, put an opener
 				If(clause=="",
-					clause=" ( `"||column||"`=\!""||(opts[i])||"\!" ";,
+					clause=" `"||column||"` in ( \!""||(opts[i])||"\!" ";,
 					
-					// Otherwise, put an OR and the current option
-					clause=clause||" OR `"||column||"`=\!""||(opts[i])||"\!" ";
+					// Otherwise, put a comma and the current option
+					clause=clause||" , \!""||(opts[i])||"\!" ";
 				);
 			);						
 		);
@@ -456,7 +457,7 @@ Update ParamBox=Function({},
 			);
 			
 			// Update the list box and recount
-			parambox<<set items(all params) << set nlines(12);
+			parambox<<set items(all params) << set nlines(12) <<set width(275);
 			recount();
 		);
 	);
@@ -526,6 +527,155 @@ Wildcard Selection=Function({},
 );
 
 //////////////////////////////////////////////////
+// Utilities for saving and retreiving application state
+////////////////////////////////////////////////// 
+Save State=Function({},
+	state=AssociativeArray();
+	
+	state["source"]=sourcebox<<gettext();
+	state["project"]=projectbox<<gettext();
+	state["wildcard"]=wildcardbox<<gettext();
+	state["selectionoptions"]=selectionoptions<<getselected();
+	state["params"]=parambox<<get selected();
+	
+	state["pc"]=pcbox<<gettext();
+	state["lot"]=lotbox<<gettext();
+	state["wafer"]=waferbox<<gettext();
+	state["splits"]=splitsbox<<gettext();
+	state["wafermap"]=wafermapbox<<gettext();
+	state["splitdev"]=splitdevbox<<get();
+	state["invisible"]=invisiblebox<<get();
+	state["closeprev"]=closeprevbox<<get();
+	state["runongenerate"]=runongeneratebox<<get();
+	
+	state["plotparams"]=plotparambox<<get selected();
+	state["querytable"]=querytablebox<<gettext();
+	state["specialanalysis"]=specialbox<<get();
+	state["centeredge"]=splitCEbox<<get();
+	state["width"]=widthbox<<get();
+	state["height"]=heightbox<<get();
+	state["tracklines"]=tracklinesbox<<get selected();
+	state["filterfailure"]=filterfailurebox<<get();
+	state["showreflines"]=reflinesbox<<get();
+	state["authlim"]=authlimbox<<get();
+	state["user"]=LowerCase(userbox<<gettext());
+	state["analysis"]=analysisbox<<gettext();
+	
+	statecode=Char(Eval Expr(state=Expr(state);));
+	file=Pick File("Save State File", "$DOCUMENTS",{"JSL scripts|jsl"},1,1,"JmpForJoy State.jsl");
+	If(file!="",Save Text File(file,statecode));
+	
+);
+
+Reload State=Function({},
+	file=Pick File("Reload State File", "$DOCUMENTS",{"JSL scripts|jsl"},1,0);
+	If(file!="",
+		statecode=Load Text File(file);
+		Eval(statecode);
+		Show(state);
+		
+	sourcebox<<settext(state["source"]);
+	projectbox<<settext(state["project"]);
+	wildcardbox<<settext(state["wildcard"]);
+	selectionoptions<<setselected(state["selectionoptions"]);
+	UpdateParamBox();
+	
+	params=parambox<<getitems;
+	For(p=1,p<=NItems(params),p++,
+		If(Contains(state["params"],params[p]),
+			parambox<<setselected(p,1,1)));
+	
+	pcbox<<settext(state["pc"]);
+	lotbox<<settext(state["lot"]);
+	waferbox<<settext(state["wafer"]);
+	splitsbox<<settext(state["splits"]);
+	wafermapbox<<settext(state["wafermap"]);
+	splitdevbox<<set(1,state["splitdev"]);
+	invisiblebox<<set(1,state["invisible"]);
+	closeprevbox<<set(1,state["closeprev"]);
+	runongeneratebox<<set(1,state["runongenerate"],1);
+	Generate Query();
+	
+	
+	plotparams=plotparambox<<getitems;
+	For(p=1,p<=NItems(plotparams),p++,
+		If(Contains(state["plotparams"],plotparams[p]),
+			plotparambox<<setselected(p,1,1)));
+			
+	querytablebox<<settext(state["querytable"]);
+	specialbox<<set(1,state["specialanalysis"]);
+	splitCEbox<<set(1,state["centeredge"]);
+	widthbox<<set(state["width"]);
+	heightbox<<set(state["height"]);
+	tracklinesbox<<set selected(state["tracklines"]);
+	filterfailurebox<<set(1,state["filterfailure"]);
+	reflinesbox<<set(1,state["showreflines"]);
+	authlimbox<<set(1,state["authlim"]);
+	userbox<<settext(state["user"]);
+	analysisbox<<settext(state["analysis"]);
+	
+	RunAnalysis();
+	);
+);
+
+
+
+runAnalysis=Function({},
+	// Create new run entry
+	run=N Items(::rundicts)+1;
+	::rundicts[run]=AssociativeArray();
+	
+	// Make sure the current query exists
+	Try(DataTable(querytablebox<<gettext()),
+		Throw("No current query to plot from!"));
+	
+	// Make sure there's a parameter selected
+	Try((plotparambox<<get selected())[1],
+	Throw("Select a parameter to plot!\!N"||"(The little box on the right.)"));
+	
+	// Get desires from GUI							
+	::rundicts[run]["params"]=plotparambox<<get selected();
+	::rundicts[run]["querytable"]=querytablebox<<gettext();
+	::rundicts[run]["specialanalysis"]=specialbox<<get();
+	::rundicts[run]["centeredge"]=splitCEbox<<get();
+	width=widthbox<<get();height=heightbox<<get();
+	::rundicts[run]["graphsize"]=eval expr(Size(expr(width),expr(height)));
+	::rundicts[run]["tracklines"]=tracklinesbox<<get selected();
+	::rundicts[run]["filterfailure"]=filterfailurebox<<get();
+	::rundicts[run]["showreflines"]=reflinesbox<<get();
+	::rundicts[run]["defaulttosliders"]=0;
+	::rundicts[run]["source"]=sourcebox<<gettext();
+	::rundicts[run]["project"]=projectbox<<gettext();
+	::rundicts[run]["authlim"]=authlimbox<<get();
+	::rundicts[run]["user"]=LowerCase(userbox<<gettext());
+	
+	
+	
+	// If the username was left blank, yell at the user
+	If(::rundicts[run]["user"]=="",
+		NewWindow(
+			"Please enter a username",<<Modal,
+			TextBox("  Before you use the plotting functionality, "||
+			"please enter a JmpForJoy username.  "||
+			"It can be anything.  This will help the software "||
+			"track your axis preferences "||
+			"and adjusted limits and such.",<<SetWrap(300)),
+			TextBox("  You can put your"||
+			" username directly into this script "||
+			"to save time in the future. Just search DBFrontEnd.jsl for "||
+			"<b>defaults[\!"user\!"]=\!"\!";</b>,"||
+			" and put in your name!",
+			<<Set Wrap(300),
+			<<Markup(1))
+		);
+		,
+		// Otherwise, call variability report script
+		Eval(EvalExpr(Include(expr(::scriptdir||(analysisbox<<gettext)))));
+		mainFunction(run);
+	);
+);	
+
+//////////////////////////////////////////////////
 // Create the graphical front-end
 //////////////////////////////////////////////////
 
@@ -588,12 +738,16 @@ eval(eval expr(New Window("JmpForJoy",
 			// Help section with link to main page
 			BorderBox(Left(10),Right(10),Top(5),Bottom(10),Sides(15),
 				VListBox(Align(Center),
-					TextBox("<b>Curiousity, Confusion, or Complaints?</b>",<< Set Width(279),<<Markup(1)),
-					BorderBox(Top(27),Bottom(27),
+					TextBox("<b>Help Page and Utilities</b>",<< Set Width(280),<<Markup(1)),
+					BorderBox(Top(14),Bottom(15),VListBox(Align(Center),
 						ButtonBox("JmpForJoy Main Page",
 							Web("http://extfnddb01.adsdesign.analog.com")
+						),
+						HListBox(
+							ButtonBox("Save State",Save State()),
+							ButtonBox("Reload State",Reload State()),							
 						)
-					)
+					))
 				)
 			)
 		),
@@ -662,87 +816,15 @@ eval(eval expr(New Window("JmpForJoy",
 					),
 					specialbox=CheckBox("Special Analysis"),
 					splitCEbox=CheckBox("Split Center/Edge"),
-					showlegendbox=CheckBox("Show Legend"),
+					filterfailurebox=CheckBox("Filter Failure"),
 					reflinesbox=CheckBox("Show Ref Lines",<<Set(1)),
 					authlimbox=CheckBox("Authoritative Limits",<<Set(0)),
 					HListBox(TextBox("JmpForJoy User: "),userbox=TextEditBox(defaults["user"])),
 					
 					// Button to run the plotting functionality!
 					HListBox(
-						ButtonBox("Generate Plot",
-					
-							// Create new run entry
-							run=N Items(::rundicts)+1;
-							::rundicts[run]=AssociativeArray();
-							
-							// Make sure the current query exists
-							Try(DataTable(querytablebox<<gettext()),
-								Throw("No current query to plot from!"));
-							
-							// Make sure there's a parameter selected
-							Try((plotparambox<<get selected())[1],
-							Throw("Select a parameter to plot!\!N"||"(The little box on the right.)"));
-							
-							// Get desires from GUI							
-							::rundicts[run]["params"]=plotparambox<<get selected();
-							::rundicts[run]["querytable"]=querytablebox<<gettext();
-							::rundicts[run]["specialanalysis"]=specialbox<<get();
-							::rundicts[run]["centeredge"]=splitCEbox<<get();
-							width=widthbox<<get();height=heightbox<<get();
-							::rundicts[run]["graphsize"]=eval expr(Size(name expr(width),name expr(height)));
-							::rundicts[run]["tracklines"]=tracklinesbox<<get selected();
-							::rundicts[run]["showlegend"]=showlegendbox<<get();
-							::rundicts[run]["showreflines"]=reflinesbox<<get();
-							::rundicts[run]["defaulttosliders"]=0;
-							::rundicts[run]["source"]=sourcebox<<gettext();
-							::rundicts[run]["project"]=projectbox<<gettext();
-							::rundicts[run]["authlim"]=authlimbox<<get();
-							::rundicts[run]["user"]=LowerCase(userbox<<gettext());
-							
-							
-							
-							// If the username was left blank, yell at the user
-							If(::rundicts[run]["user"]=="",
-								NewWindow(
-									"Please enter a username",<<Modal,
-									TextBox("  Before you use the plotting functionality, "||
-									"please enter a JmpForJoy username.  "||
-									"It can be anything.  This will help the software "||
-									"track your axis preferences "||
-									"and adjusted limits and such.",<<SetWrap(300)),
-									TextBox("  You can put your"||
-									" username directly into this script "||
-									"to save time in the future. Just search DBFrontEnd.jsl for "||
-									"<b>defaults[\!"user\!"]=\!"\!";</b>,"||
-									" and put in your name!",
-									<<Set Wrap(300),
-									<<Markup(1))
-								);
-								,
-								// Otherwise, call variability report script
-								Include(expr(::scriptdir||"generateVariabilityReport.jsl"));
-								generateVariabilityReport(run);									
-							);
-							
-						),
-						ButtonBox("Failuremap",
-					
-							// Create new run entry
-							run=N Items(::rundicts)+1;
-							::rundicts[run]=AssociativeArray();
-							
-							// Get desires from GUI
-							::rundicts[run]["params"]=plotparambox<<get selected();
-							::rundicts[run]["querytable"]=querytablebox<<gettext();
-							::rundicts[run]["source"]=sourcebox<<gettext();
-							::rundicts[run]["project"]=projectbox<<gettext();
-							::rundicts[run]["authlim"]=authlimbox<<get();
-							::rundicts[run]["user"]=userbox<<gettext();
-							
-							// Call failuremap script
-							Include(expr(::scriptdir||"generateFailureWafermap.jsl"));
-							generateFailureWafermap(N Items(::rundicts));
-						))),
+						ButtonBox("Generate Plot",runAnalysis()),
+						)),
 					
 					// Box for current query table and PlotParamBox
 					BorderBox(Left(10),VListBox(
@@ -751,7 +833,8 @@ eval(eval expr(New Window("JmpForJoy",
 							querytablebox=TextEditBox("",<<Set Width(135),<<SetScript(UpdatePlotParamBox()))
 						),
 						TextBox("Plot Parameter (select one):"),
-						plotparambox=ListBox({},width(161),nlines(6));
+						plotparambox=ListBox({},width(161),nlines(6)),
+						analysisbox=TextEditBox(defaults["analysisscript"],<<Set Hint("Analysis Script"))
 					))
 				)
 			)
