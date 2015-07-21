@@ -438,8 +438,8 @@ Update ParamBox=Function({},
 		whereclause=GenerateWhereClause(subclauses);
 		dbc =  Create Database Connection("DSN=AdvDev Database");
 		desc=Execute SQL(dbc,"SELECT DISTINCT(PARAM) FROM Lots JOIN Loads on Lots.LOTID=Loads.LOTID"
-			||" JOIN "||(defaults["datatable"])||" on Loads.LOADID="||(defaults["datatable"])||".LOADID "
-			||whereclause||" ORDER BY `PARAM`;",
+			||" JOIN Params on Loads.LOADID=Params.LOADID "
+			||whereclause||" AND DESTINATION='"||(defaults["datatable"])||"' ORDER BY `PARAM`;",
 			"ParamsList",Invisible);
 		CloseDatabaseConnection(dbc);
 		

@@ -1,0 +1,21 @@
+// README
+// Replace the 'user' variable below.
+// Then run this script to get the relevant limits.
+
+
+// Keep variables private
+Names Default To Here(1);
+
+// Replace this appropriately [lowercase!!!]
+user="dave";
+
+// Connect to the database
+dbc =  Create Database Connection("DSN=AdvDev Database");
+
+// Get the limits table for this user
+Execute SQL(dbc,
+	"SELECT * FROM UserPreferences WHERE Username='"||user||"'",
+	"Limits Table for "||user);
+
+// Close the database connection
+CloseDatabaseConnection(dbc);

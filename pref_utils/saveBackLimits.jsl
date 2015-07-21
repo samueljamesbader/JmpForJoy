@@ -1,0 +1,42 @@
+// README
+// Make sure the limits table you were editing is selected
+// [there's a tables dropdown on the menubar above, which should say "Limits table for ..."]
+// Then run this script.
+
+// Keep variables private
+Names Default To Here(1);
+
+// Connect to the database
+dbc =  Create Database Connection("DSN=AdvDev Database");
+
+// Function to sanitizes values for the database
+// - replaces '"' by '\"' within strings
+// - surrounds values with quotation marks
+// - replaces missing values with NULL
+escape=Function({str},
+	escstr=Substitute(char(str),"\!"","\!\\!"");
+	If(escstr==".","NULL","\!""||escstr||"\!"");
+);
+
+// Build the SQL to replace all the rows of this table into the database
+sql="REPLACE INTO UserPreferences (username,source,param,valinv,lal,ual,lvl,uvl,lsl,usl,inc,scale,mt,format) VALUES ";
+For Each Row(
+		sql=sql||"("||escape(:USERNAME)||","||escape(:SOURCE)||","||escape(:PARAM)||","||escape(:VALINV)
+		||","||escape(:LAL)||","||escape(:UAL)||","||escape(:LVL)||","||escape(:UVL)||","||escape(:LSL)||","
+		||escape(:USL)||","||escape(:INC)||","||escape(:SCALE)||","||escape(:MT)||","||escape(:FORMAT)||"), ";
+);
+sql=Remove(sql,Length(sql)-1,2)||";";
+
+// Show the sql statement in the log in case you're curious
+Write(sql);
+
+// Run the command
+Execute SQL(dbc,sql);
+
+// Close the connection
+CloseDatabaseConnection(dbc);
+
+// Note to database-savvy readers: yes, the "right way" to do this would be some use of "LOAD DATA INFILE".
+// But there are all sorts of formatting inconsistencies for the CSVs that become relevant because these strings
+// contain both commas and quotation marks and '.' as NULLs.  We just want a way to do this now, and since
+// we will never deal with many rows here, the speed difference is not vital.
