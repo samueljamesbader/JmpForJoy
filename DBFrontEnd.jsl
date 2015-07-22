@@ -571,50 +571,50 @@ Reload State=Function({},
 	file=Pick File("Reload State File", "$DOCUMENTS",{"JSL scripts|jsl"},1,0);
 	If(file!="",
 		statecode=Load Text File(file);
-		Eval(statecode);
+		Eval(Parse(statecode));
 		Show(state);
-		
-	sourcebox<<settext(state["source"]);
-	projectbox<<settext(state["project"]);
-	wildcardbox<<settext(state["wildcard"]);
-	selectionoptions<<setselected(state["selectionoptions"]);
-	UpdateParamBox();
-	
-	params=parambox<<getitems;
-	For(p=1,p<=NItems(params),p++,
-		If(Contains(state["params"],params[p]),
-			parambox<<setselected(p,1,1)));
-	
-	pcbox<<settext(state["pc"]);
-	lotbox<<settext(state["lot"]);
-	waferbox<<settext(state["wafer"]);
-	splitsbox<<settext(state["splits"]);
-	wafermapbox<<settext(state["wafermap"]);
-	splitdevbox<<set(1,state["splitdev"]);
-	invisiblebox<<set(1,state["invisible"]);
-	closeprevbox<<set(1,state["closeprev"]);
-	runongeneratebox<<set(1,state["runongenerate"],1);
-	Generate Query();
-	
-	
-	plotparams=plotparambox<<getitems;
-	For(p=1,p<=NItems(plotparams),p++,
-		If(Contains(state["plotparams"],plotparams[p]),
-			plotparambox<<setselected(p,1,1)));
 			
-	querytablebox<<settext(state["querytable"]);
-	specialbox<<set(1,state["specialanalysis"]);
-	splitCEbox<<set(1,state["centeredge"]);
-	widthbox<<set(state["width"]);
-	heightbox<<set(state["height"]);
-	tracklinesbox<<set selected(state["tracklines"]);
-	filterfailurebox<<set(1,state["filterfailure"]);
-	reflinesbox<<set(1,state["showreflines"]);
-	authlimbox<<set(1,state["authlim"]);
-	userbox<<settext(state["user"]);
-	analysisbox<<settext(state["analysis"]);
-	
-	RunAnalysis();
+		sourcebox<<settext(state["source"]);
+		projectbox<<settext(state["project"]);
+		wildcardbox<<settext(state["wildcard"]);
+		selectionoptions<<setselected(state["selectionoptions"]);
+		UpdateParamBox();
+		
+		params=parambox<<getitems;
+		For(p=1,p<=NItems(params),p++,
+			If(Contains(state["params"],params[p]),
+				parambox<<setselected(p,1,1)));
+		
+		pcbox<<settext(state["pc"]);
+		lotbox<<settext(state["lot"]);
+		waferbox<<settext(state["wafer"]);
+		splitsbox<<settext(state["splits"]);
+		wafermapbox<<settext(state["wafermap"]);
+		splitdevbox<<set(1,state["splitdev"]);
+		invisiblebox<<set(1,state["invisible"]);
+		closeprevbox<<set(1,state["closeprev"]);
+		runongeneratebox<<set(1,state["runongenerate"],1);
+		Generate Query();
+		
+		
+		plotparams=plotparambox<<getitems;
+		For(p=1,p<=NItems(plotparams),p++,
+			If(Contains(state["plotparams"],plotparams[p]),
+				plotparambox<<setselected(p,1,1)));
+				
+		querytablebox<<settext(state["querytable"]);
+		specialbox<<set(1,state["specialanalysis"]);
+		splitCEbox<<set(1,state["centeredge"]);
+		widthbox<<set(state["width"]);
+		heightbox<<set(state["height"]);
+		tracklinesbox<<set selected(state["tracklines"]);
+		filterfailurebox<<set(1,state["filterfailure"]);
+		reflinesbox<<set(1,state["showreflines"]);
+		authlimbox<<set(1,state["authlim"]);
+		userbox<<settext(state["user"]);
+		analysisbox<<settext(state["analysis"]);
+		
+		RunAnalysis();
 	);
 );
 
